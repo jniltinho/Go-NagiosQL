@@ -900,33 +900,10 @@ func (g *Generator) resolveCommandIDStr(idStr string) string {
 
 // --- Formatting helpers ---
 
-// hostField formats a key=value pair matching PHP NagiosQL host output:
-// 4-space indent, value aligned at column 24 (key padded to 20 chars).
-func hostField(key, value string) string {
-	pad := 20 - len(key)
-	if pad < 1 {
-		pad = 1
-	}
-	return "    " + key + strings.Repeat(" ", pad) + value + "\n"
-}
-
-// svcField formats a key=value pair matching PHP NagiosQL service output:
-// 4-space indent, value aligned at column 25 (key padded to 21 chars).
-func svcField(key, value string) string {
-	pad := 21 - len(key)
-	if pad < 1 {
-		pad = 1
-	}
-	return "    " + key + strings.Repeat(" ", pad) + value + "\n"
-}
-
 // cmdField formats a key=value pair matching PHP NagiosQL commands.cfg output:
 // TAB indent, key padded to 31 chars, TAB separator, then value.
 func cmdField(key, value string) string {
-	pad := 31 - len(key)
-	if pad < 1 {
-		pad = 1
-	}
+	pad := max(1, 31-len(key))
 	return "\t" + key + strings.Repeat(" ", pad) + "\t" + value + "\n"
 }
 
@@ -946,9 +923,11 @@ func sanitizeName(name string) string {
 
 // --- Generic FK resolvers ---
 
-// resolveN2N resolves n:n via link table (type=2): returns comma-separated target field values.
+// resolveN2N resolves an n:n FK relationship (relation type=2) by joining through a link table.
+// It returns a comma-separated list of targetField values from targetTable for all active records
+// linked to masterID in linkTable.
 func (g *Generator) resolveN2N(masterID uint, linkTable, targetTable, targetField string) string {
-	var names []string
+	names := []string{}
 	q := `SELECT t.` + targetField + ` FROM ` + targetTable + ` t` +
 		` INNER JOIN ` + linkTable + ` l ON l.idSlave = t.id` +
 		` WHERE l.idMaster = ? AND t.active = '1' ORDER BY t.` + targetField
@@ -956,14 +935,16 @@ func (g *Generator) resolveN2N(masterID uint, linkTable, targetTable, targetFiel
 	return strings.Join(names, ",")
 }
 
-// resolveStrSlave resolves type=6 (service_description stored as strSlave string in link table).
+// resolveStrSlave resolves a type=6 FK where the value is stored directly as the strSlave string
+// column in the link table (used for service_description fields). Returns a comma-separated list.
 func (g *Generator) resolveStrSlave(masterID uint, linkTable string) string {
-	var names []string
+	names := []string{}
 	g.db.Raw(`SELECT strSlave FROM `+linkTable+` WHERE idMaster = ? ORDER BY strSlave`, masterID).Scan(&names)
 	return strings.Join(names, ",")
 }
 
-// resolveHostByID resolves a direct host FK (type=1): field stores tbl_host.id.
+// resolveHostByID resolves a direct host FK (type=1) by looking up host_name in tbl_host by id.
+// Returns an empty string when id is 0 or the record is not found.
 func (g *Generator) resolveHostByID(id uint) string {
 	if id == 0 {
 		return ""
@@ -973,7 +954,8 @@ func (g *Generator) resolveHostByID(id uint) string {
 	return name
 }
 
-// resolveServiceByID resolves a direct service FK (type=1): field stores tbl_service.id.
+// resolveServiceByID resolves a direct service FK (type=1) by looking up service_description in
+// tbl_service by id. Returns an empty string when id is 0 or the record is not found.
 func (g *Generator) resolveServiceByID(id uint) string {
 	if id == 0 {
 		return ""
@@ -983,9 +965,11 @@ func (g *Generator) resolveServiceByID(id uint) string {
 	return name
 }
 
-// resolveServicegroupMembers resolves servicegroup members (type=5).
-// tbl_lnkServicegroupToService has columns: idMaster, idSlaveH, idSlaveHG, idSlaveS, exclude.
-// Returns "hostname,svc_desc,hostname,svc_desc,..." pairs.
+// resolveServicegroupMembers resolves type=5 servicegroup members for the given sgID.
+// Each row in tbl_lnkServicegroupToService can reference either a direct host (idSlaveH) or a
+// hostgroup (idSlaveHG) combined with a service (idSlaveS). Hostgroup references are expanded to
+// individual host+service pairs by querying both link directions. Excluded rows are skipped.
+// Returns a flat comma-separated "host,svc,host,svc,..." string as required by Nagios.
 func (g *Generator) resolveServicegroupMembers(sgID uint) string {
 	type row struct {
 		SlaveH  uint  `gorm:"column:idSlaveH"`
@@ -996,7 +980,7 @@ func (g *Generator) resolveServicegroupMembers(sgID uint) string {
 	var rows []row
 	g.db.Raw(`SELECT idSlaveH, idSlaveHG, idSlaveS, exclude FROM tbl_lnkServicegroupToService WHERE idMaster = ?`, sgID).Scan(&rows)
 
-	var parts []string
+	parts := []string{}
 	seen := map[string]bool{}
 	for _, r := range rows {
 		if r.Exclude != 0 {
@@ -1035,6 +1019,8 @@ func (g *Generator) resolveServicegroupMembers(sgID uint) string {
 
 // --- Writers for the 7 extended object types ---
 
+// WriteServiceGroups generates the Nagios servicegroup configuration file from all active
+// tbl_servicegroup records and writes it (with backup) to outputFile.
 func (g *Generator) WriteServiceGroups(outputFile string) error {
 	var rows []models.Servicegroup
 	if err := g.db.Where("active = '1'").Order("servicegroup_name").Find(&rows).Error; err != nil {
@@ -1071,6 +1057,8 @@ func (g *Generator) WriteServiceGroups(outputFile string) error {
 		g.wrapFile("Service group configuration file", buf.Bytes()))
 }
 
+// WriteHostDependencies generates the Nagios hostdependency configuration file from all active
+// tbl_hostdependency records and writes it (with backup) to outputFile.
 func (g *Generator) WriteHostDependencies(outputFile string) error {
 	var rows []models.Hostdependency
 	if err := g.db.Where("active = '1'").Order("dependent_host_name").Find(&rows).Error; err != nil {
@@ -1119,6 +1107,8 @@ func (g *Generator) WriteHostDependencies(outputFile string) error {
 		g.wrapFile("Host dependency configuration file", buf.Bytes()))
 }
 
+// WriteHostEscalations generates the Nagios hostescalation configuration file from all active
+// tbl_hostescalation records and writes it (with backup) to outputFile.
 func (g *Generator) WriteHostEscalations(outputFile string) error {
 	var rows []models.Hostescalation
 	if err := g.db.Where("active = '1'").Order("host_name, hostgroup_name").Find(&rows).Error; err != nil {
@@ -1172,6 +1162,8 @@ func (g *Generator) WriteHostEscalations(outputFile string) error {
 		g.wrapFile("Host escalations configuration file", buf.Bytes()))
 }
 
+// WriteHostExtInfo generates the Nagios extended host information configuration file from all active
+// tbl_hostextinfo records and writes it (with backup) to outputFile.
 func (g *Generator) WriteHostExtInfo(outputFile string) error {
 	var rows []models.Hostextinfo
 	if err := g.db.Where("active = '1'").Order("host_name").Find(&rows).Error; err != nil {
@@ -1217,6 +1209,8 @@ func (g *Generator) WriteHostExtInfo(outputFile string) error {
 		g.wrapFile("Extended host information configuration file", buf.Bytes()))
 }
 
+// WriteServiceDependencies generates the Nagios servicedependency configuration file from all active
+// tbl_servicedependency records and writes it (with backup) to outputFile.
 func (g *Generator) WriteServiceDependencies(outputFile string) error {
 	var rows []models.Servicedependency
 	if err := g.db.Where("active = '1'").Order("config_name").Find(&rows).Error; err != nil {
@@ -1285,6 +1279,8 @@ func (g *Generator) WriteServiceDependencies(outputFile string) error {
 		g.wrapFile("Service dependency configuration file", buf.Bytes()))
 }
 
+// WriteServiceEscalations generates the Nagios serviceescalation configuration file from all active
+// tbl_serviceescalation records and writes it (with backup) to outputFile.
 func (g *Generator) WriteServiceEscalations(outputFile string) error {
 	var rows []models.Serviceescalation
 	if err := g.db.Where("active = '1'").Order("config_name").Find(&rows).Error; err != nil {
@@ -1348,6 +1344,8 @@ func (g *Generator) WriteServiceEscalations(outputFile string) error {
 		g.wrapFile("Service escalations configuration file", buf.Bytes()))
 }
 
+// WriteServiceExtInfo generates the Nagios extended service information configuration file from all
+// active tbl_serviceextinfo records and writes it (with backup) to outputFile.
 func (g *Generator) WriteServiceExtInfo(outputFile string) error {
 	var rows []models.Serviceextinfo
 	if err := g.db.Where("active = '1'").Order("host_name").Find(&rows).Error; err != nil {

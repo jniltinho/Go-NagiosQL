@@ -17,6 +17,7 @@ For a project overview and quick start, see the [root README](../README.md).
   - [Timeperiods](#timeperiods)
   - [Groups](#groups)
   - [Templates](#templates)
+  - [Extended Object Types](#extended-object-types)
   - [Variable Definitions](#variable-definitions)
   - [Users](#users)
   - [Settings](#settings)
@@ -24,6 +25,7 @@ For a project overview and quick start, see the [root README](../README.md).
   - [Import](#import)
   - [Monitoring](#monitoring)
   - [Logbook](#logbook)
+- [Testing](#testing)
 - [Migrating from PHP NagiosQL](#migrating-from-php-nagiosql)
 - [Docker](#docker)
 - [Security Notes](#security-notes)
@@ -198,15 +200,146 @@ No token is issued. The user must reset their password via `PUT /api/v1/users/:i
 | GET | `/api/v1/hostgroups/:id` | Get hostgroup |
 | PUT | `/api/v1/hostgroups/:id` | Update hostgroup |
 | DELETE | `/api/v1/hostgroups/:id` | Delete hostgroup |
-| POST | `/api/v1/hostgroups/:id/members` | Add host to hostgroup |
+| PUT | `/api/v1/hostgroups/:id/members` | Add host to hostgroup |
 | GET | `/api/v1/servicegroups` | List servicegroups |
 | POST | `/api/v1/servicegroups` | Create servicegroup |
-| GET | `/api/v1/servicegroups/:id` | Get servicegroup |
 | DELETE | `/api/v1/servicegroups/:id` | Delete servicegroup |
 | GET | `/api/v1/contactgroups` | List contactgroups |
 | POST | `/api/v1/contactgroups` | Create contactgroup |
-| GET | `/api/v1/contactgroups/:id` | Get contactgroup |
 | DELETE | `/api/v1/contactgroups/:id` | Delete contactgroup |
+
+---
+
+### Extended Object Types
+
+Full CRUD (GET / POST / GET:id / PUT:id / DELETE:id) for six additional Nagios object types:
+
+#### Host Dependencies
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/hostdependencies` | List host dependencies |
+| POST | `/api/v1/hostdependencies` | Create host dependency |
+| GET | `/api/v1/hostdependencies/:id` | Get host dependency |
+| PUT | `/api/v1/hostdependencies/:id` | Update host dependency |
+| DELETE | `/api/v1/hostdependencies/:id` | Delete host dependency |
+
+**Create (minimal):**
+```json
+{
+  "config_name": "web-depends-on-db",
+  "inherits_parent": 1,
+  "execution_failure_criteria": "o",
+  "notification_failure_criteria": "o"
+}
+```
+FK fields (`dependent_host_name`, `host_name`, `dependent_hostgroup_name`, `hostgroup_name`, `dependency_period`) store the integer count flag (`0`=none, `1`=linked). The actual names are resolved from the corresponding `tbl_lnkHostdependencyTo*` link tables when generating `.cfg` files.
+
+#### Host Escalations
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/hostescalations` | List host escalations |
+| POST | `/api/v1/hostescalations` | Create host escalation |
+| GET | `/api/v1/hostescalations/:id` | Get host escalation |
+| PUT | `/api/v1/hostescalations/:id` | Update host escalation |
+| DELETE | `/api/v1/hostescalations/:id` | Delete host escalation |
+
+**Create (minimal):**
+```json
+{
+  "config_name": "host-esc-admins",
+  "first_notification": 3,
+  "last_notification": 0,
+  "notification_interval": 60,
+  "escalation_options": "r,u"
+}
+```
+
+#### Host Extended Info
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/hostextinfo` | List host extended info entries |
+| POST | `/api/v1/hostextinfo` | Create host extended info entry |
+| GET | `/api/v1/hostextinfo/:id` | Get host extended info entry |
+| PUT | `/api/v1/hostextinfo/:id` | Update host extended info entry |
+| DELETE | `/api/v1/hostextinfo/:id` | Delete host extended info entry |
+
+**Create:**
+```json
+{
+  "host_name": 4,
+  "notes": "Primary web server",
+  "notes_url": "http://wiki/web01",
+  "icon_image": "base/linux40.png",
+  "statusmap_image": "base/linux40.gd2"
+}
+```
+`host_name` is the integer ID from `tbl_host`.
+
+#### Service Dependencies
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/servicedependencies` | List service dependencies |
+| POST | `/api/v1/servicedependencies` | Create service dependency |
+| GET | `/api/v1/servicedependencies/:id` | Get service dependency |
+| PUT | `/api/v1/servicedependencies/:id` | Update service dependency |
+| DELETE | `/api/v1/servicedependencies/:id` | Delete service dependency |
+
+**Create (minimal):**
+```json
+{
+  "config_name": "http-depends-on-dns",
+  "inherits_parent": 1,
+  "execution_failure_criteria": "c,u",
+  "notification_failure_criteria": "c,u"
+}
+```
+
+#### Service Escalations
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/serviceescalations` | List service escalations |
+| POST | `/api/v1/serviceescalations` | Create service escalation |
+| GET | `/api/v1/serviceescalations/:id` | Get service escalation |
+| PUT | `/api/v1/serviceescalations/:id` | Update service escalation |
+| DELETE | `/api/v1/serviceescalations/:id` | Delete service escalation |
+
+**Create (minimal):**
+```json
+{
+  "config_name": "svc-esc-critical",
+  "first_notification": 2,
+  "last_notification": 0,
+  "notification_interval": 60,
+  "escalation_options": "w,u,c"
+}
+```
+
+#### Service Extended Info
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/serviceextinfo` | List service extended info entries |
+| POST | `/api/v1/serviceextinfo` | Create service extended info entry |
+| GET | `/api/v1/serviceextinfo/:id` | Get service extended info entry |
+| PUT | `/api/v1/serviceextinfo/:id` | Update service extended info entry |
+| DELETE | `/api/v1/serviceextinfo/:id` | Delete service extended info entry |
+
+**Create:**
+```json
+{
+  "host_name": 4,
+  "service_description": 7,
+  "notes": "CPU Load service",
+  "notes_url": "http://wiki/cpu-load",
+  "icon_image": "cpu.png"
+}
+```
+`host_name` and `service_description` are integer IDs from `tbl_host` and `tbl_service`.
 
 ---
 
@@ -277,23 +410,67 @@ A user cannot delete their own account.
 | POST | `/api/v1/config/verify` | Run `nagios -v nagios.cfg` |
 | POST | `/api/v1/config/restart` | Touch `reload_trigger` to signal reload |
 
-The config generator produces output format-compatible with the original PHP NagiosQL:
+`POST /config/write` generates **23 files** in total:
+
+| File | Object type | Dir |
+|------|-------------|-----|
+| `commands.cfg` | Commands | base |
+| `contactgroups.cfg` | Contact groups | base |
+| `contacts.cfg` | Contacts | base |
+| `contacttemplates.cfg` | Contact templates | base |
+| `hostgroups.cfg` | Host groups | base |
+| `hosttemplates.cfg` | Host templates | base |
+| `hostdependencies.cfg` | Host dependencies | base |
+| `hostescalations.cfg` | Host escalations | base |
+| `hostextinfo.cfg` | Host extended info | base |
+| `servicetemplates.cfg` | Service templates | base |
+| `servicegroups.cfg` | Service groups | base |
+| `servicedependencies.cfg` | Service dependencies | base |
+| `serviceescalations.cfg` | Service escalations | base |
+| `serviceextinfo.cfg` | Service extended info | base |
+| `timeperiods.cfg` | Time periods | base |
+| `hosts/<name>.cfg` | One per host | host_config_dir |
+| `services/<name>.cfg` | One per host with services | service_config_dir |
+
+All files include the standard NagiosQL header/footer with generation timestamp and version:
 
 ```
+###############################################################################
+#
+# Host configuration file
+#
+# Created by: Go-NagiosQL Version v1.0.0
+# Date:	      2026-06-17 18:00:00
+# Version:    Nagios 4.x config file
+#
+# --- DO NOT EDIT THIS FILE BY HAND ---
+# Nagios QL will overwite all manual settings during the next update
+#
+###############################################################################
+
 define host {
-    use                 linux-server
-    host_name           web01
-    alias               Web Server 01
-    address             10.0.0.1
-    max_check_attempts  3
-    contact_groups      admins
+	host_name                      	web01
+	alias                          	Web Server 01
+	address                        	10.0.0.1
+	max_check_attempts             	3
+	contact_groups                 	admins
+	register                       	1
 }
+
+###############################################################################
+#
+# Host configuration file
+#
+# END OF FILE
+#
+###############################################################################
 ```
 
-- Template names are resolved from the `tbl_lnkHostToHosttemplate` join table.
-- Contact groups and host links are resolved from their respective link tables.
+- Output is byte-for-byte compatible with the original PHP NagiosQL writer.
+- FK fields are resolved via `tbl_lnkXxx` join tables (n:n) or direct ID lookup (1:1).
+- `service_description` in service dependencies/escalations uses `strSlave` string storage.
+- `servicegroup members` expands hostgroup references to individual host+service pairs.
 - Fields with value `2` (inherit from template) are silently omitted.
-- `register` is only written for template objects (`register 0`).
 - Existing files are automatically backed up to `nagios.backup_dir` before overwriting.
 
 ---
@@ -323,6 +500,131 @@ define host {
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/logbook` | List audit log entries |
+
+---
+
+## Testing
+
+The project has three test layers: **unit tests** (no external deps), **integration tests** (live MariaDB), and **API smoke tests** (running server).
+
+---
+
+### Unit Tests
+
+Run without any external dependency — use SQLite in-memory via `testhelpers.NewDB`.
+
+```bash
+# Run all unit tests
+go test ./...
+
+# With race detector and coverage report
+make test
+
+# Run a specific package
+go test ./internal/api/handlers/...
+go test ./internal/services/nagconfig/...
+
+# Run a single test by name
+go test ./internal/api/handlers/... -run TestLogin_Success
+go test ./internal/api/handlers/... -run TestHostdependency
+go test ./internal/services/nagconfig/... -run TestWriteHost
+```
+
+**What is covered:**
+
+| Package | Tests | What they cover |
+|---------|-------|-----------------|
+| `internal/api/handlers` | 66 | Auth (login, MD5 legacy, logout), hosts, services, commands, users, extended object types (hostdependencies, hostescalations, hostextinfo, servicedependencies, serviceescalations, serviceextinfo) |
+| `internal/services/nagconfig` | 8 | Config file generation: host fields, optional fields omission, service groups, write-all, backup rotation |
+| `internal/services/nagimport` | 4 | `.cfg` parser: single object, multiple objects, inline comments, empty file |
+| `internal/config` | 4 | Config loading: defaults, env var overrides, missing secret, short secret |
+| `internal/services/auth` | — | JWT issue/verify, bcrypt and MD5 password verification |
+
+**Auth test scenarios (`auth_test.go`):**
+
+```bash
+go test ./internal/api/handlers/... -v -run "TestLogin|TestLogout"
+```
+
+| Test | Scenario |
+|------|----------|
+| `TestLogin_Success` | bcrypt password → returns `access_token` |
+| `TestLogin_WrongPassword` | wrong password → 401 |
+| `TestLogin_LegacyMD5_CorrectPassword` | PHP MD5 hash, correct password → `requires_password_reset: true` (no token) |
+| `TestLogin_LegacyMD5_WrongPassword` | PHP MD5 hash, wrong password → 401 |
+| `TestLogin_MissingFields` | empty body → 400 |
+| `TestLogout` | POST `/logout` → clears refresh cookie |
+
+**Extended object type test scenarios (`extended_test.go`):**
+
+```bash
+go test ./internal/api/handlers/... -v -run "TestHostdependency|TestHostescalation|TestHostextinfo|TestServicedependency|TestServiceescalation|TestServiceextinfo"
+```
+
+Each of the 6 types has: List, Create, Create with validation error, Get, Get 404, Update, Delete — **37 tests total**.
+
+---
+
+### Integration Tests
+
+Require a live MariaDB instance. Uses the test Docker Compose stack on port `3307`.
+
+```bash
+# 1. Start the test database
+make db-start
+
+# 2. Run integration tests
+make test-integration
+
+# 3. Stop (keeps volume) or wipe
+make db-stop
+make db-reset
+```
+
+Integration tests live in `internal/integration/` and run with the `integration` build tag so they never execute during `go test ./...`.
+
+---
+
+### API Smoke Tests
+
+Bash scripts that exercise the running HTTP server end-to-end. Require the server to be up on `http://localhost:8081`.
+
+```bash
+# Build and run smoke tests automatically (server starts/stops around tests)
+make test-api
+
+# Or run manually against any server
+./bin/nagiosql serve &
+BASE_URL=http://localhost:8081 bash test/api/smoke.sh
+
+# Run a single script
+BASE_URL=http://localhost:8081 bash test/api/auth.sh
+BASE_URL=http://localhost:8081 bash test/api/hosts.sh
+```
+
+**Smoke test scripts:**
+
+| Script | Endpoints tested |
+|--------|-----------------|
+| `auth.sh` | `/auth/login`, `/auth/logout`, `/auth/refresh` |
+| `hosts.sh` | CRUD `/hosts` |
+| `services.sh` | CRUD `/services` |
+| `commands.sh` | CRUD `/commands` |
+| `contacts.sh` | CRUD `/contacts` |
+| `groups.sh` | `/hostgroups`, `/servicegroups`, `/contactgroups` |
+| `timeperiods.sh` | CRUD `/timeperiods` |
+| `users.sh` | CRUD `/users`, password change |
+| `import.sh` | `POST /import` |
+| `monitoring.sh` | `GET /monitoring/summary` |
+| `logbook.sh` | `GET /logbook` |
+
+---
+
+### CI Entry Point
+
+```bash
+make check   # vet + build + unit tests
+```
 
 ---
 

@@ -46,14 +46,13 @@ func TestWriteHost_BasicFields(t *testing.T) {
 	}
 	content := string(data)
 
-	// PHP NagiosQL format: 4-space indent, value at column 24 (key padded to 20).
-	// register=1 is the Nagios default and is never written.
+	// PHP NagiosQL format: TAB indent, key padded to 31 chars, TAB, value.
 	for _, want := range []string{
 		"define host {",
-		"    host_name           web01",
-		"    alias               Web Server 01",
-		"    address             10.0.0.1",
-		"    check_command       check-host-alive",
+		"\thost_name                      \tweb01",
+		"\talias                          \tWeb Server 01",
+		"\taddress                        \t10.0.0.1",
+		"\tcheck_command                  \tcheck-host-alive",
 	} {
 		if !strings.Contains(content, want) {
 			t.Errorf("missing %q in output:\n%s", want, content)
@@ -126,13 +125,13 @@ func TestWriteServiceGroup(t *testing.T) {
 	}
 	content := string(data)
 
-	// Services: value at column 25 (key padded to 21 chars).
-	// "service_description" = 19 chars → 2 spaces before value.
+	// PHP NagiosQL format: TAB indent, key padded to 31 chars, TAB, value.
+	// "service_description" = 19 chars → 12 spaces padding.
 	for _, want := range []string{
 		"define service {",
-		"    service_description  PING",
-		"    service_description  HTTP",
-		"    service_description  DISK",
+		"\tservice_description            \tPING",
+		"\tservice_description            \tHTTP",
+		"\tservice_description            \tDISK",
 	} {
 		if !strings.Contains(content, want) {
 			t.Errorf("missing %q in service output:\n%s", want, content)

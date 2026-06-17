@@ -107,6 +107,44 @@ func RegisterRoutes(e *echo.Echo, db *gorm.DB, cfg *config.Config) {
 	v1.POST("/contactgroups", gh.CreateContactgroup)
 	v1.DELETE("/contactgroups/:id", gh.DeleteContactgroup)
 
+	// Extended object types.
+	ext := handlers.NewExtendedHandler(db)
+	v1.GET("/hostdependencies", ext.ListHostdependencies)
+	v1.POST("/hostdependencies", ext.CreateHostdependency)
+	v1.GET("/hostdependencies/:id", ext.GetHostdependency)
+	v1.PUT("/hostdependencies/:id", ext.UpdateHostdependency)
+	v1.DELETE("/hostdependencies/:id", ext.DeleteHostdependency)
+
+	v1.GET("/hostescalations", ext.ListHostescalations)
+	v1.POST("/hostescalations", ext.CreateHostescalation)
+	v1.GET("/hostescalations/:id", ext.GetHostescalation)
+	v1.PUT("/hostescalations/:id", ext.UpdateHostescalation)
+	v1.DELETE("/hostescalations/:id", ext.DeleteHostescalation)
+
+	v1.GET("/hostextinfo", ext.ListHostextinfo)
+	v1.POST("/hostextinfo", ext.CreateHostextinfo)
+	v1.GET("/hostextinfo/:id", ext.GetHostextinfo)
+	v1.PUT("/hostextinfo/:id", ext.UpdateHostextinfo)
+	v1.DELETE("/hostextinfo/:id", ext.DeleteHostextinfo)
+
+	v1.GET("/servicedependencies", ext.ListServicedependencies)
+	v1.POST("/servicedependencies", ext.CreateServicedependency)
+	v1.GET("/servicedependencies/:id", ext.GetServicedependency)
+	v1.PUT("/servicedependencies/:id", ext.UpdateServicedependency)
+	v1.DELETE("/servicedependencies/:id", ext.DeleteServicedependency)
+
+	v1.GET("/serviceescalations", ext.ListServiceescalations)
+	v1.POST("/serviceescalations", ext.CreateServiceescalation)
+	v1.GET("/serviceescalations/:id", ext.GetServiceescalation)
+	v1.PUT("/serviceescalations/:id", ext.UpdateServiceescalation)
+	v1.DELETE("/serviceescalations/:id", ext.DeleteServiceescalation)
+
+	v1.GET("/serviceextinfo", ext.ListServiceextinfo)
+	v1.POST("/serviceextinfo", ext.CreateServiceextinfo)
+	v1.GET("/serviceextinfo/:id", ext.GetServiceextinfo)
+	v1.PUT("/serviceextinfo/:id", ext.UpdateServiceextinfo)
+	v1.DELETE("/serviceextinfo/:id", ext.DeleteServiceextinfo)
+
 	// Templates.
 	tmpl := handlers.NewTemplateHandler(db)
 	v1.GET("/hosttemplates", tmpl.ListHosttemplates)

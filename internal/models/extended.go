@@ -2,7 +2,20 @@ package models
 
 import "time"
 
-// Hostdependency maps to tbl_hostdependency.
+// Hostdependency represents a Nagios host-dependency definition stored in
+// tbl_hostdependency. A host dependency tells Nagios to suppress checks or
+// notifications for a dependent host when the master host is in a particular
+// state.
+//
+// FK flag fields — DependentHostName, DependentHostgroupName, HostName, and
+// HostgroupName — are uint8 presence flags (0 = no members set, 1 = at least
+// one member linked). The actual host or hostgroup names are stored in the
+// corresponding join tables and resolved at config-generation time:
+//
+//   - tbl_lnkHostdependencyToHost_DH    → dependent_host_name
+//   - tbl_lnkHostdependencyToHostgroup_DH → dependent_hostgroup_name
+//   - tbl_lnkHostdependencyToHost_H     → host_name
+//   - tbl_lnkHostdependencyToHostgroup_H → hostgroup_name
 type Hostdependency struct {
 	ID                          uint      `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
 	ConfigName                  string    `gorm:"column:config_name;size:255;not null" json:"config_name"`
@@ -23,7 +36,19 @@ type Hostdependency struct {
 
 func (Hostdependency) TableName() string { return "tbl_hostdependency" }
 
-// Hostescalation maps to tbl_hostescalation.
+// Hostescalation represents a Nagios host-escalation definition stored in
+// tbl_hostescalation. A host escalation overrides normal notification
+// behaviour — contacts, intervals, and options — after a host has been in a
+// problem state for a configurable number of notifications.
+//
+// FK flag fields — HostName, HostgroupName, Contacts, and ContactGroups — are
+// uint8 presence flags (0 = no members set, 1 = at least one member linked).
+// The actual names are resolved from join tables at config-generation time:
+//
+//   - tbl_lnkHostescalationToHost         → host_name
+//   - tbl_lnkHostescalationToHostgroup     → hostgroup_name
+//   - tbl_lnkHostescalationToContact       → contacts
+//   - tbl_lnkHostescalationToContactgroup  → contact_groups
 type Hostescalation struct {
 	ID                   uint      `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
 	ConfigName           string    `gorm:"column:config_name;size:255;not null" json:"config_name"`
@@ -45,7 +70,15 @@ type Hostescalation struct {
 
 func (Hostescalation) TableName() string { return "tbl_hostescalation" }
 
-// Hostextinfo maps to tbl_hostextinfo.
+// Hostextinfo represents a Nagios extended-host-information definition stored
+// in tbl_hostextinfo. Extended host info attaches presentation metadata —
+// icon images, status-map coordinates, notes, and URLs — to a host without
+// changing its check or notification behaviour.
+//
+// Unlike other structs in this package, HostName is NOT a uint8 FK flag.
+// It is the integer primary-key ID of a row in tbl_host; the config generator
+// calls resolveHostByID to look up the actual host_name string at generation
+// time.
 type Hostextinfo struct {
 	ID             uint      `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
 	HostName       uint      `gorm:"column:host_name;not null" json:"host_name"`
@@ -67,7 +100,25 @@ type Hostextinfo struct {
 
 func (Hostextinfo) TableName() string { return "tbl_hostextinfo" }
 
-// Servicedependency maps to tbl_servicedependency.
+// Servicedependency represents a Nagios service-dependency definition stored
+// in tbl_servicedependency. A service dependency tells Nagios to suppress
+// checks or notifications for a dependent service when the master service is
+// in a particular state.
+//
+// FK flag fields — DependentHostName, DependentHostgroupName,
+// DependentServiceDescription, DependentServicegroupName, HostName,
+// HostgroupName, ServiceDescription, and ServicegroupName — are uint8
+// presence flags (0 = no members set, 1 = at least one member linked).
+// The actual names are resolved from join tables at config-generation time:
+//
+//   - tbl_lnkServicedependencyToHost_DH        → dependent_host_name
+//   - tbl_lnkServicedependencyToHostgroup_DH    → dependent_hostgroup_name
+//   - tbl_lnkServicedependencyToService_DS      → dependent_service_description
+//   - tbl_lnkServicedependencyToServicegroup_DS → dependent_servicegroup_name
+//   - tbl_lnkServicedependencyToHost_H          → host_name
+//   - tbl_lnkServicedependencyToHostgroup_H     → hostgroup_name
+//   - tbl_lnkServicedependencyToService_S       → service_description
+//   - tbl_lnkServicedependencyToServicegroup_S  → servicegroup_name
 type Servicedependency struct {
 	ID                          uint      `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
 	ConfigName                  string    `gorm:"column:config_name;size:255;not null" json:"config_name"`
@@ -92,7 +143,22 @@ type Servicedependency struct {
 
 func (Servicedependency) TableName() string { return "tbl_servicedependency" }
 
-// Serviceescalation maps to tbl_serviceescalation.
+// Serviceescalation represents a Nagios service-escalation definition stored
+// in tbl_serviceescalation. A service escalation overrides normal notification
+// behaviour — contacts, intervals, and options — after a service has been in a
+// problem state for a configurable number of notifications.
+//
+// FK flag fields — HostName, HostgroupName, ServiceDescription,
+// ServicegroupName, Contacts, and ContactGroups — are uint8 presence flags
+// (0 = no members set, 1 = at least one member linked). The actual names are
+// resolved from join tables at config-generation time:
+//
+//   - tbl_lnkServiceescalationToHost          → host_name
+//   - tbl_lnkServiceescalationToHostgroup      → hostgroup_name
+//   - tbl_lnkServiceescalationToService        → service_description
+//   - tbl_lnkServiceescalationToServicegroup   → servicegroup_name
+//   - tbl_lnkServiceescalationToContact        → contacts
+//   - tbl_lnkServiceescalationToContactgroup   → contact_groups
 type Serviceescalation struct {
 	ID                   uint      `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
 	ConfigName           string    `gorm:"column:config_name;size:255;not null" json:"config_name"`
@@ -116,7 +182,15 @@ type Serviceescalation struct {
 
 func (Serviceescalation) TableName() string { return "tbl_serviceescalation" }
 
-// Serviceextinfo maps to tbl_serviceextinfo.
+// Serviceextinfo represents a Nagios extended-service-information definition
+// stored in tbl_serviceextinfo. Extended service info attaches presentation
+// metadata — icon images, notes, and URLs — to a service without changing its
+// check or notification behaviour.
+//
+// Unlike other structs in this package, HostName and ServiceDescription are
+// NOT uint8 FK flags. They are integer primary-key IDs of rows in tbl_host
+// and tbl_service respectively; the config generator calls resolveHostByID and
+// resolveServiceByID to look up the actual name strings at generation time.
 type Serviceextinfo struct {
 	ID                 uint      `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
 	HostName           uint      `gorm:"column:host_name;not null" json:"host_name"`

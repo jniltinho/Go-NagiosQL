@@ -4,6 +4,8 @@ A Go rewrite of [NagiosQL](https://www.nagiosql.org/) — a web-based configurat
 
 **Stack:** Go 1.26 · Echo v5 · GORM · Cobra · Viper · MariaDB · JWT
 
+**96 REST endpoints** covering all Nagios object types · **23 `.cfg` files** generated from DB · byte-for-byte compatible with PHP NagiosQL output
+
 ---
 
 ## Quick Start
@@ -60,7 +62,9 @@ Detailed reference lives in [`DOCUMENTS/`](DOCUMENTS/README.md):
 | Document | Description |
 |----------|-------------|
 | [Configuration reference](DOCUMENTS/README.md#configuration) | All `config.toml` keys and environment variables |
-| [API reference](DOCUMENTS/README.md#api-reference) | Every endpoint with request/response examples |
+| [API reference](DOCUMENTS/README.md#api-reference) | All 96 endpoints with request/response examples |
+| [Extended object types](DOCUMENTS/README.md#extended-object-types) | hostdependencies, hostescalations, hostextinfo, servicedependencies, serviceescalations, serviceextinfo |
+| [Config generation](DOCUMENTS/README.md#config-generation) | 23 generated `.cfg` files, format details, FK resolution |
 | [Migrating from PHP NagiosQL](DOCUMENTS/README.md#migrating-from-php-nagiosql) | Schema compatibility, legacy passwords, cutover steps |
 | [Docker deployment](DOCUMENTS/README.md#docker) | Production image and full Nagios stack compose |
 | [Security notes](DOCUMENTS/README.md#security-notes) | Passwords, JWT, reload trigger |
