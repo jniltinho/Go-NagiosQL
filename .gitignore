@@ -27,6 +27,9 @@ DOCUMENTS/docker/nagios-core/volumes
 # Go module stub that prevents ./... from recursing into DOCUMENTS
 DOCUMENTS/go.mod
 
+# OpenSpec planning artifacts (local workflow, not for version control)
+openspec/
+
 # OS / editor
 .DS_Store
 *.swp
