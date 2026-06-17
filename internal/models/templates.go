@@ -83,6 +83,7 @@ type Servicetemplate struct {
 	ActiveChecksEnabled    uint8     `gorm:"column:active_checks_enabled;not null;default:1" json:"active_checks_enabled"`
 	PassiveChecksEnabled   uint8     `gorm:"column:passive_checks_enabled;not null;default:1" json:"passive_checks_enabled"`
 	CheckPeriod            uint      `gorm:"column:check_period;not null;default:0" json:"check_period"`
+	ParallelizeCheck       uint8     `gorm:"column:parallelize_check;not null;default:1" json:"parallelize_check"`
 	ObsessOverService      uint8     `gorm:"column:obsess_over_service;not null;default:1" json:"obsess_over_service"`
 	CheckFreshness         uint8     `gorm:"column:check_freshness;not null;default:0" json:"check_freshness"`
 	FreshnessThreshold     *int      `gorm:"column:freshness_threshold" json:"freshness_threshold,omitempty"`

@@ -6,11 +6,9 @@ import (
 
 	"go-nagiosql/internal/config"
 	"go-nagiosql/internal/db"
-	"go-nagiosql/internal/models"
 	"go-nagiosql/internal/services/nagconfig"
 	"go-nagiosql/internal/services/nagios"
 	"github.com/spf13/cobra"
-	"gorm.io/gorm"
 )
 
 var configCmd = &cobra.Command{
@@ -42,12 +40,6 @@ func init() {
 	rootCmd.AddCommand(configCmd)
 }
 
-func loadConfigTarget(database *gorm.DB) (models.Configtarget, error) {
-	var ct models.Configtarget
-	err := database.Where("domain_id = ?", 0).First(&ct).Error
-	return ct, err
-}
-
 func runConfigWrite(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load(cfgFile)
 	if err != nil {
@@ -57,12 +49,13 @@ func runConfigWrite(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	ct, err := loadConfigTarget(database)
-	if err != nil {
-		return fmt.Errorf("loading configtarget: %w", err)
-	}
 
-	gen := nagconfig.New(database, ct.HostPath, ct.ServicePath, ct.BackupPath)
+	gen := nagconfig.New(database,
+		cfg.Nagios.HostConfigDir,
+		cfg.Nagios.ServiceConfigDir,
+		cfg.Nagios.BackupDir,
+		buildVersion,
+	)
 
 	objectType := "all"
 	if len(args) > 0 {

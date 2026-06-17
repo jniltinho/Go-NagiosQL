@@ -16,14 +16,14 @@ func newGenerator(t *testing.T) (*nagconfig.Generator, string) {
 	t.Helper()
 	db := testhelpers.NewDB(t)
 	tmp := t.TempDir()
-	g := nagconfig.New(db, filepath.Join(tmp, "hosts"), filepath.Join(tmp, "services"), filepath.Join(tmp, "backup"))
+	g := nagconfig.New(db, filepath.Join(tmp, "hosts"), filepath.Join(tmp, "services"), filepath.Join(tmp, "backup"), "")
 	return g, tmp
 }
 
 func TestWriteHost_BasicFields(t *testing.T) {
 	db := testhelpers.NewDB(t)
 	tmp := t.TempDir()
-	g := nagconfig.New(db, filepath.Join(tmp, "hosts"), filepath.Join(tmp, "services"), filepath.Join(tmp, "backup"))
+	g := nagconfig.New(db, filepath.Join(tmp, "hosts"), filepath.Join(tmp, "services"), filepath.Join(tmp, "backup"), "")
 
 	host := models.Host{
 		HostName:     "web01",
@@ -64,7 +64,7 @@ func TestWriteHost_BasicFields(t *testing.T) {
 func TestWriteHost_OptionalFieldsOmitted(t *testing.T) {
 	db := testhelpers.NewDB(t)
 	tmp := t.TempDir()
-	g := nagconfig.New(db, filepath.Join(tmp, "hosts"), filepath.Join(tmp, "services"), filepath.Join(tmp, "backup"))
+	g := nagconfig.New(db, filepath.Join(tmp, "hosts"), filepath.Join(tmp, "services"), filepath.Join(tmp, "backup"), "")
 
 	host := models.Host{
 		HostName:     "minimal-host",
@@ -103,7 +103,7 @@ func TestWriteHost_NotFound(t *testing.T) {
 func TestWriteServiceGroup(t *testing.T) {
 	db := testhelpers.NewDB(t)
 	tmp := t.TempDir()
-	g := nagconfig.New(db, filepath.Join(tmp, "hosts"), filepath.Join(tmp, "services"), filepath.Join(tmp, "backup"))
+	g := nagconfig.New(db, filepath.Join(tmp, "hosts"), filepath.Join(tmp, "services"), filepath.Join(tmp, "backup"), "")
 
 	for _, desc := range []string{"PING", "HTTP", "DISK"} {
 		db.Create(&models.Service{
@@ -151,7 +151,7 @@ func TestWriteServiceGroup_Empty(t *testing.T) {
 func TestWriteAllHosts(t *testing.T) {
 	db := testhelpers.NewDB(t)
 	tmp := t.TempDir()
-	g := nagconfig.New(db, filepath.Join(tmp, "hosts"), filepath.Join(tmp, "services"), filepath.Join(tmp, "backup"))
+	g := nagconfig.New(db, filepath.Join(tmp, "hosts"), filepath.Join(tmp, "services"), filepath.Join(tmp, "backup"), "")
 
 	for i, name := range []string{"host-a", "host-b", "host-c"} {
 		_ = i
@@ -192,7 +192,7 @@ func TestWriteAllHosts(t *testing.T) {
 func TestWriteAllServices(t *testing.T) {
 	db := testhelpers.NewDB(t)
 	tmp := t.TempDir()
-	g := nagconfig.New(db, filepath.Join(tmp, "hosts"), filepath.Join(tmp, "services"), filepath.Join(tmp, "backup"))
+	g := nagconfig.New(db, filepath.Join(tmp, "hosts"), filepath.Join(tmp, "services"), filepath.Join(tmp, "backup"), "")
 
 	for _, host := range []string{"srv1", "srv2"} {
 		db.Create(&models.Service{
@@ -217,7 +217,7 @@ func TestWriteAllServices(t *testing.T) {
 func TestWriteWithBackup(t *testing.T) {
 	db := testhelpers.NewDB(t)
 	tmp := t.TempDir()
-	g := nagconfig.New(db, filepath.Join(tmp, "hosts"), filepath.Join(tmp, "services"), filepath.Join(tmp, "backup"))
+	g := nagconfig.New(db, filepath.Join(tmp, "hosts"), filepath.Join(tmp, "services"), filepath.Join(tmp, "backup"), "")
 
 	host := models.Host{
 		HostName:     "bkp-host",
@@ -245,7 +245,7 @@ func TestWriteWithBackup(t *testing.T) {
 func TestSanitizeName_SpecialChars(t *testing.T) {
 	db := testhelpers.NewDB(t)
 	tmp := t.TempDir()
-	g := nagconfig.New(db, filepath.Join(tmp, "hosts"), filepath.Join(tmp, "services"), filepath.Join(tmp, "backup"))
+	g := nagconfig.New(db, filepath.Join(tmp, "hosts"), filepath.Join(tmp, "services"), filepath.Join(tmp, "backup"), "")
 
 	host := models.Host{
 		HostName:     "host/with:spaces and\\slashes",

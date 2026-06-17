@@ -37,7 +37,7 @@ func (h *ConfigHandler) getTarget() models.Configtarget {
 // @Router       /config/write [post]
 func (h *ConfigHandler) WriteAll(c *echo.Context) error {
 	ct := h.getTarget()
-	gen := nagconfig.New(h.db, ct.HostPath, ct.ServicePath, ct.BackupPath)
+	gen := nagconfig.New(h.db, ct.HostPath, ct.ServicePath, ct.BackupPath, "")
 	written, err := gen.WriteAll()
 	if err != nil {
 		return InternalError(c, err)
