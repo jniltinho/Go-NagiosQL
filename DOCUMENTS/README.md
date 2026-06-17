@@ -25,7 +25,6 @@ For a project overview and quick start, see the [root README](../README.md).
   - [Import](#import)
   - [Monitoring](#monitoring)
   - [Logbook](#logbook)
-- [Testing](#testing)
 - [Migrating from PHP NagiosQL](#migrating-from-php-nagiosql)
 - [Docker](#docker)
 - [Security Notes](#security-notes)
@@ -503,131 +502,6 @@ define host {
 
 ---
 
-## Testing
-
-The project has three test layers: **unit tests** (no external deps), **integration tests** (live MariaDB), and **API smoke tests** (running server).
-
----
-
-### Unit Tests
-
-Run without any external dependency — use SQLite in-memory via `testhelpers.NewDB`.
-
-```bash
-# Run all unit tests
-go test ./...
-
-# With race detector and coverage report
-make test
-
-# Run a specific package
-go test ./internal/api/handlers/...
-go test ./internal/services/nagconfig/...
-
-# Run a single test by name
-go test ./internal/api/handlers/... -run TestLogin_Success
-go test ./internal/api/handlers/... -run TestHostdependency
-go test ./internal/services/nagconfig/... -run TestWriteHost
-```
-
-**What is covered:**
-
-| Package | Tests | What they cover |
-|---------|-------|-----------------|
-| `internal/api/handlers` | 66 | Auth (login, MD5 legacy, logout), hosts, services, commands, users, extended object types (hostdependencies, hostescalations, hostextinfo, servicedependencies, serviceescalations, serviceextinfo) |
-| `internal/services/nagconfig` | 8 | Config file generation: host fields, optional fields omission, service groups, write-all, backup rotation |
-| `internal/services/nagimport` | 4 | `.cfg` parser: single object, multiple objects, inline comments, empty file |
-| `internal/config` | 4 | Config loading: defaults, env var overrides, missing secret, short secret |
-| `internal/services/auth` | — | JWT issue/verify, bcrypt and MD5 password verification |
-
-**Auth test scenarios (`auth_test.go`):**
-
-```bash
-go test ./internal/api/handlers/... -v -run "TestLogin|TestLogout"
-```
-
-| Test | Scenario |
-|------|----------|
-| `TestLogin_Success` | bcrypt password → returns `access_token` |
-| `TestLogin_WrongPassword` | wrong password → 401 |
-| `TestLogin_LegacyMD5_CorrectPassword` | PHP MD5 hash, correct password → `requires_password_reset: true` (no token) |
-| `TestLogin_LegacyMD5_WrongPassword` | PHP MD5 hash, wrong password → 401 |
-| `TestLogin_MissingFields` | empty body → 400 |
-| `TestLogout` | POST `/logout` → clears refresh cookie |
-
-**Extended object type test scenarios (`extended_test.go`):**
-
-```bash
-go test ./internal/api/handlers/... -v -run "TestHostdependency|TestHostescalation|TestHostextinfo|TestServicedependency|TestServiceescalation|TestServiceextinfo"
-```
-
-Each of the 6 types has: List, Create, Create with validation error, Get, Get 404, Update, Delete — **37 tests total**.
-
----
-
-### Integration Tests
-
-Require a live MariaDB instance. Uses the test Docker Compose stack on port `3307`.
-
-```bash
-# 1. Start the test database
-make db-start
-
-# 2. Run integration tests
-make test-integration
-
-# 3. Stop (keeps volume) or wipe
-make db-stop
-make db-reset
-```
-
-Integration tests live in `internal/integration/` and run with the `integration` build tag so they never execute during `go test ./...`.
-
----
-
-### API Smoke Tests
-
-Bash scripts that exercise the running HTTP server end-to-end. Require the server to be up on `http://localhost:8081`.
-
-```bash
-# Build and run smoke tests automatically (server starts/stops around tests)
-make test-api
-
-# Or run manually against any server
-./bin/nagiosql serve &
-BASE_URL=http://localhost:8081 bash test/api/smoke.sh
-
-# Run a single script
-BASE_URL=http://localhost:8081 bash test/api/auth.sh
-BASE_URL=http://localhost:8081 bash test/api/hosts.sh
-```
-
-**Smoke test scripts:**
-
-| Script | Endpoints tested |
-|--------|-----------------|
-| `auth.sh` | `/auth/login`, `/auth/logout`, `/auth/refresh` |
-| `hosts.sh` | CRUD `/hosts` |
-| `services.sh` | CRUD `/services` |
-| `commands.sh` | CRUD `/commands` |
-| `contacts.sh` | CRUD `/contacts` |
-| `groups.sh` | `/hostgroups`, `/servicegroups`, `/contactgroups` |
-| `timeperiods.sh` | CRUD `/timeperiods` |
-| `users.sh` | CRUD `/users`, password change |
-| `import.sh` | `POST /import` |
-| `monitoring.sh` | `GET /monitoring/summary` |
-| `logbook.sh` | `GET /logbook` |
-
----
-
-### CI Entry Point
-
-```bash
-make check   # vet + build + unit tests
-```
-
----
-
 ## Migrating from PHP NagiosQL
 
 go-nagiosql is designed to be a drop-in backend replacement for the PHP application.
@@ -683,6 +557,12 @@ Use `config.toml.docker` as the mounted config — it points paths to the shared
 | **reload_trigger** | Must be a regular file, not `nagios.cmd`. Writing to the command FIFO from Go causes a deadlock. The reload watcher (supervisord or a shell loop) should read this file and issue the actual `nagios -s` signal. |
 | **Config backups** | Every `.cfg` file overwrite is preceded by a timestamped backup in `nagios.backup_dir`. |
 | **Admin endpoints** | User management and settings writes require the `admin` role embedded in the JWT claim. |
+
+---
+
+## Development
+
+For local setup, project structure, testing (unit / integration / smoke), Swagger regeneration, code style rules, and the checklist for adding new object types, see **[DEVELOPMENT.md](./DEVELOPMENT.md)**.
 
 ---
 

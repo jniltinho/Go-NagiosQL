@@ -68,6 +68,7 @@ Detailed reference lives in [`DOCUMENTS/`](DOCUMENTS/README.md):
 | [Migrating from PHP NagiosQL](DOCUMENTS/README.md#migrating-from-php-nagiosql) | Schema compatibility, legacy passwords, cutover steps |
 | [Docker deployment](DOCUMENTS/README.md#docker) | Production image and full Nagios stack compose |
 | [Security notes](DOCUMENTS/README.md#security-notes) | Passwords, JWT, reload trigger |
+| [Development guide](DOCUMENTS/DEVELOPMENT.md) | Local setup, testing (unit/integration/smoke), Swagger, code style, adding new object types |
 | [Architecture — PHP NagiosQL](DOCUMENTS/docs/DIAGRAMA_NAGIOSQL.md) | Original system diagram and config lifecycle |
 
 ---
