@@ -6,22 +6,6 @@ A Go rewrite of [NagiosQL](https://www.nagiosql.org/) — a web-based configurat
 
 ---
 
-## Architecture
-
-### Go-NagiosQL
-
-![Go-NagiosQL Architecture](DOCUMENTS/screenshots/go-nagiosql-arch.svg)
-
-### PHP NagiosQL (reference)
-
-![PHP NagiosQL Architecture](DOCUMENTS/screenshots/php-nagiosql-arch.svg)
-
-### Nagios Core 4
-
-![Nagios Core 4 Architecture](DOCUMENTS/screenshots/nagios-core-arch.svg)
-
----
-
 ## Quick Start
 
 ```bash
@@ -81,6 +65,25 @@ Detailed reference lives in [`DOCUMENTS/`](DOCUMENTS/README.md):
 | [Docker deployment](DOCUMENTS/README.md#docker) | Production image and full Nagios stack compose |
 | [Security notes](DOCUMENTS/README.md#security-notes) | Passwords, JWT, reload trigger |
 | [Architecture — PHP NagiosQL](DOCUMENTS/docs/DIAGRAMA_NAGIOSQL.md) | Original system diagram and config lifecycle |
+
+---
+
+## Architecture Diagrams
+
+<p align="center">
+  <img src="DOCUMENTS/screenshots/go-nagiosql-arch.svg" width="640" alt="Go-NagiosQL Architecture"/>
+</p>
+<p align="center"><em>Go-NagiosQL — API flow from JWT auth to Nagios config generation</em></p>
+
+<p align="center">
+  <img src="DOCUMENTS/screenshots/php-nagiosql-arch.svg" width="640" alt="PHP NagiosQL Architecture"/>
+</p>
+<p align="center"><em>PHP NagiosQL — original container stack (nginx · php-fpm · supervisord)</em></p>
+
+<p align="center">
+  <img src="DOCUMENTS/screenshots/nagios-core-arch.svg" width="640" alt="Nagios Core 4 Architecture"/>
+</p>
+<p align="center"><em>Nagios Core 4 — config parser · scheduler · checks · notifications</em></p>
 
 ---
 
