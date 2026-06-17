@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/jniltinho/go-nagiosql/internal/config"
-	"github.com/jniltinho/go-nagiosql/internal/db"
-	"github.com/jniltinho/go-nagiosql/internal/models"
-	"github.com/jniltinho/go-nagiosql/internal/services/nagconfig"
-	"github.com/jniltinho/go-nagiosql/internal/services/nagios"
+	"go-nagiosql/internal/config"
+	"go-nagiosql/internal/db"
+	"go-nagiosql/internal/models"
+	"go-nagiosql/internal/services/nagconfig"
+	"go-nagiosql/internal/services/nagios"
 	"github.com/spf13/cobra"
 	"gorm.io/gorm"
 )

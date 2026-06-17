@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	apimw "github.com/jniltinho/go-nagiosql/internal/api/middleware"
-	"github.com/jniltinho/go-nagiosql/internal/api/handlers"
-	"github.com/jniltinho/go-nagiosql/internal/models"
-	"github.com/jniltinho/go-nagiosql/internal/services/auth"
+	apimw "go-nagiosql/internal/api/middleware"
+	"go-nagiosql/internal/api/handlers"
+	"go-nagiosql/internal/models"
+	"go-nagiosql/internal/services/auth"
 	"github.com/labstack/echo/v5"
 )
 

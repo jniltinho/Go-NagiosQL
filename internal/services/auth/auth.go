@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/jniltinho/go-nagiosql/internal/config"
-	"github.com/jniltinho/go-nagiosql/internal/models"
+	"go-nagiosql/internal/config"
+	"go-nagiosql/internal/models"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )

@@ -6,7 +6,7 @@ package migrations
 import (
 	"fmt"
 
-	"github.com/jniltinho/go-nagiosql/internal/models"
+	"go-nagiosql/internal/models"
 	"gorm.io/gorm"
 )
 

@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/jniltinho/go-nagiosql/internal/api/handlers"
-	"github.com/jniltinho/go-nagiosql/internal/services/auth"
+	"go-nagiosql/internal/api/handlers"
+	"go-nagiosql/internal/services/auth"
 	"github.com/labstack/echo/v5"
 )
 

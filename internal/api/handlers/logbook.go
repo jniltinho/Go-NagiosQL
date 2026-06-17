@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/jniltinho/go-nagiosql/internal/models"
+	"go-nagiosql/internal/models"
 	"github.com/labstack/echo/v5"
 	"gorm.io/gorm"
 )

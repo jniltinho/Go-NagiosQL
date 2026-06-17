@@ -17,11 +17,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jniltinho/go-nagiosql/internal/api"
-	"github.com/jniltinho/go-nagiosql/internal/config"
-	"github.com/jniltinho/go-nagiosql/internal/db"
-	"github.com/jniltinho/go-nagiosql/internal/db/migrations"
-	"github.com/jniltinho/go-nagiosql/internal/db/seeds"
+	"go-nagiosql/internal/api"
+	"go-nagiosql/internal/config"
+	"go-nagiosql/internal/db"
+	"go-nagiosql/internal/db/migrations"
+	"go-nagiosql/internal/db/seeds"
 	"github.com/labstack/echo/v5"
 	"gorm.io/gorm"
 )

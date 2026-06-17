@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/jniltinho/go-nagiosql/internal/config"
-	"github.com/jniltinho/go-nagiosql/internal/db"
-	"github.com/jniltinho/go-nagiosql/internal/db/migrations"
-	"github.com/jniltinho/go-nagiosql/internal/db/seeds"
+	"go-nagiosql/internal/config"
+	"go-nagiosql/internal/db"
+	"go-nagiosql/internal/db/migrations"
+	"go-nagiosql/internal/db/seeds"
 	"github.com/spf13/cobra"
 )
 

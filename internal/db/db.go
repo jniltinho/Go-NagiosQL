@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/jniltinho/go-nagiosql/internal/config"
+	"go-nagiosql/internal/config"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"

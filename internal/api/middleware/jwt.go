@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/jniltinho/go-nagiosql/internal/services/auth"
+	"go-nagiosql/internal/services/auth"
 	"github.com/labstack/echo/v5"
 )
 

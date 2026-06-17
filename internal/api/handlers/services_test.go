@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jniltinho/go-nagiosql/internal/api/handlers"
-	"github.com/jniltinho/go-nagiosql/internal/models"
+	"go-nagiosql/internal/api/handlers"
+	"go-nagiosql/internal/models"
 	"github.com/labstack/echo/v5"
 )
 

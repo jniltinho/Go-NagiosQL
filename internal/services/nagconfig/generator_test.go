@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jniltinho/go-nagiosql/internal/models"
-	"github.com/jniltinho/go-nagiosql/internal/services/nagconfig"
-	"github.com/jniltinho/go-nagiosql/internal/testhelpers"
+	"go-nagiosql/internal/models"
+	"go-nagiosql/internal/services/nagconfig"
+	"go-nagiosql/internal/testhelpers"
 )
 
 func newGenerator(t *testing.T) (*nagconfig.Generator, string) {

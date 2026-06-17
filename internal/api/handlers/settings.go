@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"time"
 
-	apimw "github.com/jniltinho/go-nagiosql/internal/api/middleware"
-	"github.com/jniltinho/go-nagiosql/internal/models"
-	"github.com/jniltinho/go-nagiosql/internal/services/logbook"
+	apimw "go-nagiosql/internal/api/middleware"
+	"go-nagiosql/internal/models"
+	"go-nagiosql/internal/services/logbook"
 	"github.com/labstack/echo/v5"
 	"gorm.io/gorm"
 )

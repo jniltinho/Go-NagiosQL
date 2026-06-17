@@ -4,10 +4,10 @@ package api
 import (
 	"net/http"
 
-	"github.com/jniltinho/go-nagiosql/internal/api/handlers"
-	apimw "github.com/jniltinho/go-nagiosql/internal/api/middleware"
-	"github.com/jniltinho/go-nagiosql/internal/config"
-	"github.com/jniltinho/go-nagiosql/internal/services/auth"
+	"go-nagiosql/internal/api/handlers"
+	apimw "go-nagiosql/internal/api/middleware"
+	"go-nagiosql/internal/config"
+	"go-nagiosql/internal/services/auth"
 	"github.com/labstack/echo/v5"
 	"gorm.io/gorm"
 )

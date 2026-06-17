@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/jniltinho/go-nagiosql/internal/api"
-	"github.com/jniltinho/go-nagiosql/internal/config"
-	"github.com/jniltinho/go-nagiosql/internal/db"
+	"go-nagiosql/internal/api"
+	"go-nagiosql/internal/config"
+	"go-nagiosql/internal/db"
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
 	"github.com/spf13/cobra"

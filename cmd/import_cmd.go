@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/jniltinho/go-nagiosql/internal/config"
-	"github.com/jniltinho/go-nagiosql/internal/db"
-	"github.com/jniltinho/go-nagiosql/internal/services/nagimport"
+	"go-nagiosql/internal/config"
+	"go-nagiosql/internal/db"
+	"go-nagiosql/internal/services/nagimport"
 	"github.com/spf13/cobra"
 )
 

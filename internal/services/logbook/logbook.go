@@ -4,7 +4,7 @@ package logbook
 import (
 	"time"
 
-	"github.com/jniltinho/go-nagiosql/internal/models"
+	"go-nagiosql/internal/models"
 	"gorm.io/gorm"
 )
 
