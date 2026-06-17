@@ -1,0 +1,30 @@
+[server]
+port = 8081
+dev  = false
+
+[jwt]
+# IMPORTANT: change this to a long random value in production.
+secret           = "CHANGE-ME-to-a-random-string-of-at-least-32-chars"
+access_ttl_min   = 15
+refresh_ttl_days = 7
+
+[database]
+host     = "db"
+port     = 3306
+name     = "nagiosql"
+user     = "nagiosql"
+password = "nagiosql"
+
+[nagios]
+base_dir          = "/usr/local/nagios"
+config_file       = "/usr/local/nagios/etc/nagios.cfg"
+cgi_file          = "/usr/local/nagios/etc/cgi.cfg"
+resource_file     = "/usr/local/nagios/etc/resource.cfg"
+# reload_trigger is a plain file — NOT the nagios.cmd FIFO (deadlock risk).
+reload_trigger    = "/usr/local/nagios/var/reload.trigger"
+binary            = "/usr/local/nagios/bin/nagios"
+pid_file          = "/usr/local/nagios/var/nagios.lock"
+host_config_dir   = "/usr/local/nagios/etc/hosts/"
+service_config_dir = "/usr/local/nagios/etc/services/"
+backup_dir        = "/usr/local/nagios/etc/backup/"
+import_dir        = "/usr/local/nagios/etc/import/"

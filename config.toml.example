@@ -1,0 +1,36 @@
+# NagiosQL configuration file
+# Copy to config.toml and edit before running.
+# All values can be overridden with NAGIOSQL_<SECTION>_<KEY> environment variables.
+# Example: NAGIOSQL_DATABASE_PASSWORD=secret
+
+[server]
+port = 8081
+dev  = false   # set true for verbose logging and pretty output
+
+[jwt]
+secret           = "change-me-use-at-least-32-random-characters"
+access_ttl_min   = 15    # access token lifetime in minutes
+refresh_ttl_days = 7     # refresh token lifetime in days (httpOnly cookie)
+
+[database]
+host     = "db"
+port     = 3306
+name     = "nagiosql"
+user     = "nagiosql"
+password = ""
+
+[nagios]
+base_dir          = "/usr/local/nagios"
+config_file       = "/usr/local/nagios/etc/nagios.cfg"
+cgi_file          = "/usr/local/nagios/etc/cgi.cfg"
+resource_file     = "/usr/local/nagios/etc/resource.cfg"
+# reload_trigger is a plain file polled by reload-watcher.sh.
+# Writing to it triggers a graceful Nagios reload.
+# Do NOT set this to nagios.cmd (the external command FIFO).
+reload_trigger    = "/usr/local/nagios/var/reload.trigger"
+binary            = "/usr/local/nagios/bin/nagios"
+pid_file          = "/usr/local/nagios/var/nagios.lock"
+host_config_dir   = "/usr/local/nagios/etc/nagiosql/hosts/"
+service_config_dir = "/usr/local/nagios/etc/nagiosql/services/"
+backup_dir        = "/usr/local/nagios/etc/nagiosql/backup/"
+import_dir        = "/usr/local/nagios/etc/import/"

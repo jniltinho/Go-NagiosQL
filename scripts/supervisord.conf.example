@@ -1,0 +1,44 @@
+; supervisord.conf.example
+; Copy to /etc/supervisor/conf.d/nagiosql.conf inside the Nagios container.
+; Requires supervisord to be installed: apt-get install -y supervisor
+
+[supervisord]
+nodaemon=true
+logfile=/var/log/supervisor/supervisord.log
+pidfile=/var/run/supervisord.pid
+
+; Nagios Core daemon
+[program:nagios]
+command=/usr/local/nagios/bin/nagios /usr/local/nagios/etc/nagios.cfg
+autostart=true
+autorestart=true
+startsecs=3
+stdout_logfile=/var/log/supervisor/nagios.log
+stderr_logfile=/var/log/supervisor/nagios-err.log
+priority=10
+
+; go-nagiosql REST API
+[program:go-nagiosql]
+command=/usr/local/bin/nagiosql serve --config /app/config.toml
+directory=/app
+autostart=true
+autorestart=true
+startsecs=5
+stdout_logfile=/var/log/supervisor/go-nagiosql.log
+stderr_logfile=/var/log/supervisor/go-nagiosql-err.log
+environment=NAGIOSQL_DATABASE_HOST="db",NAGIOSQL_DATABASE_PORT="3306"
+priority=20
+
+; Reload watcher — polls reload.trigger and sends SIGHUP to Nagios on change.
+; This avoids writing to nagios.cmd FIFO from Go (deadlock risk).
+[program:reload-watcher]
+command=/usr/local/bin/reload-watcher.sh \
+    /usr/local/nagios/var/reload.trigger \
+    /usr/local/nagios/var/nagios.lock \
+    5
+autostart=true
+autorestart=true
+startsecs=2
+stdout_logfile=/var/log/supervisor/reload-watcher.log
+stderr_logfile=/var/log/supervisor/reload-watcher-err.log
+priority=30

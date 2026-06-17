@@ -1,0 +1,9 @@
+# Dados persistentes dos containers (bind mounts)
+volumes/
+
+# Variáveis de ambiente com senhas (docker/nagios-core/.env)
+.env
+
+# Tarball do fonte NagiosQL (binário grande — não versionar)
+docs/*.tar.gz
+docs/*.tgz

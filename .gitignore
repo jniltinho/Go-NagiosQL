@@ -1,0 +1,35 @@
+# Binary output
+bin/
+
+# Config with secrets (use config.toml.example as template)
+config.toml
+
+# Logs
+*.log
+
+# Generated Swagger docs
+docs/swagger.json
+docs/swagger.yaml
+docs/docs.go
+
+# Go
+vendor/
+*.test
+*.out
+coverage.html
+
+# Test server PID
+.server.pid
+
+# DB volume data (PHP NagiosQL docker stack — permission-restricted)
+DOCUMENTS/docker/nagios-core/volumes
+
+# Go module stub that prevents ./... from recursing into DOCUMENTS
+DOCUMENTS/go.mod
+
+# OS / editor
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
