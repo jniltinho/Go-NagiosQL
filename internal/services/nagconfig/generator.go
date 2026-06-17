@@ -162,7 +162,14 @@ func (g *Generator) WriteAll() (int, error) {
 		{"contacttemplates.cfg", g.WriteContactTemplates},
 		{"hostgroups.cfg", g.WriteHostGroups},
 		{"hosttemplates.cfg", g.WriteHostTemplates},
+		{"hostdependencies.cfg", g.WriteHostDependencies},
+		{"hostescalations.cfg", g.WriteHostEscalations},
+		{"hostextinfo.cfg", g.WriteHostExtInfo},
 		{"servicetemplates.cfg", g.WriteServiceTemplates},
+		{"servicegroups.cfg", g.WriteServiceGroups},
+		{"servicedependencies.cfg", g.WriteServiceDependencies},
+		{"serviceescalations.cfg", g.WriteServiceEscalations},
+		{"serviceextinfo.cfg", g.WriteServiceExtInfo},
 		{"timeperiods.cfg", g.WriteTimeperiods},
 	}
 
@@ -935,6 +942,446 @@ func bangDecode(s string) string {
 func sanitizeName(name string) string {
 	r := strings.NewReplacer("/", "_", "\\", "_", ":", "_", " ", "_")
 	return r.Replace(name)
+}
+
+// --- Generic FK resolvers ---
+
+// resolveN2N resolves n:n via link table (type=2): returns comma-separated target field values.
+func (g *Generator) resolveN2N(masterID uint, linkTable, targetTable, targetField string) string {
+	var names []string
+	q := `SELECT t.` + targetField + ` FROM ` + targetTable + ` t` +
+		` INNER JOIN ` + linkTable + ` l ON l.idSlave = t.id` +
+		` WHERE l.idMaster = ? AND t.active = '1' ORDER BY t.` + targetField
+	g.db.Raw(q, masterID).Scan(&names)
+	return strings.Join(names, ",")
+}
+
+// resolveStrSlave resolves type=6 (service_description stored as strSlave string in link table).
+func (g *Generator) resolveStrSlave(masterID uint, linkTable string) string {
+	var names []string
+	g.db.Raw(`SELECT strSlave FROM `+linkTable+` WHERE idMaster = ? ORDER BY strSlave`, masterID).Scan(&names)
+	return strings.Join(names, ",")
+}
+
+// resolveHostByID resolves a direct host FK (type=1): field stores tbl_host.id.
+func (g *Generator) resolveHostByID(id uint) string {
+	if id == 0 {
+		return ""
+	}
+	var name string
+	g.db.Raw(`SELECT host_name FROM tbl_host WHERE id = ? LIMIT 1`, id).Scan(&name)
+	return name
+}
+
+// resolveServiceByID resolves a direct service FK (type=1): field stores tbl_service.id.
+func (g *Generator) resolveServiceByID(id uint) string {
+	if id == 0 {
+		return ""
+	}
+	var name string
+	g.db.Raw(`SELECT service_description FROM tbl_service WHERE id = ? LIMIT 1`, id).Scan(&name)
+	return name
+}
+
+// resolveServicegroupMembers resolves servicegroup members (type=5).
+// tbl_lnkServicegroupToService has columns: idMaster, idSlaveH, idSlaveHG, idSlaveS, exclude.
+// Returns "hostname,svc_desc,hostname,svc_desc,..." pairs.
+func (g *Generator) resolveServicegroupMembers(sgID uint) string {
+	type row struct {
+		SlaveH  uint  `gorm:"column:idSlaveH"`
+		SlaveHG uint  `gorm:"column:idSlaveHG"`
+		SlaveS  uint  `gorm:"column:idSlaveS"`
+		Exclude uint8 `gorm:"column:exclude"`
+	}
+	var rows []row
+	g.db.Raw(`SELECT idSlaveH, idSlaveHG, idSlaveS, exclude FROM tbl_lnkServicegroupToService WHERE idMaster = ?`, sgID).Scan(&rows)
+
+	var parts []string
+	seen := map[string]bool{}
+	for _, r := range rows {
+		if r.Exclude != 0 {
+			continue
+		}
+		if r.SlaveHG != 0 {
+			var svcDesc string
+			g.db.Raw(`SELECT service_description FROM tbl_service WHERE id = ? LIMIT 1`, r.SlaveS).Scan(&svcDesc)
+			var hosts []string
+			g.db.Raw(`SELECT h.host_name FROM tbl_host h
+				INNER JOIN tbl_lnkHostgroupToHost l ON l.idSlave = h.id
+				WHERE l.idMaster = ? AND h.active = '1' AND l.exclude = 0`, r.SlaveHG).Scan(&hosts)
+			var hosts2 []string
+			g.db.Raw(`SELECT h.host_name FROM tbl_host h
+				INNER JOIN tbl_lnkHostToHostgroup l ON l.idMaster = h.id
+				WHERE l.idSlave = ? AND h.active = '1' AND l.exclude = 0`, r.SlaveHG).Scan(&hosts2)
+			hosts = append(hosts, hosts2...)
+			for _, h := range hosts {
+				key := h + "," + svcDesc
+				if !seen[key] {
+					seen[key] = true
+					parts = append(parts, key)
+				}
+			}
+		} else {
+			var hostName, svcDesc string
+			g.db.Raw(`SELECT host_name FROM tbl_host WHERE id = ? AND active = '1' LIMIT 1`, r.SlaveH).Scan(&hostName)
+			g.db.Raw(`SELECT service_description FROM tbl_service WHERE id = ? AND active = '1' LIMIT 1`, r.SlaveS).Scan(&svcDesc)
+			if hostName != "" && svcDesc != "" {
+				parts = append(parts, hostName+","+svcDesc)
+			}
+		}
+	}
+	return strings.Join(parts, ",")
+}
+
+// --- Writers for the 7 extended object types ---
+
+func (g *Generator) WriteServiceGroups(outputFile string) error {
+	var rows []models.Servicegroup
+	if err := g.db.Where("active = '1'").Order("servicegroup_name").Find(&rows).Error; err != nil {
+		return fmt.Errorf("loading servicegroups: %w", err)
+	}
+	var buf bytes.Buffer
+	for _, sg := range rows {
+		buf.WriteString("define servicegroup {\n")
+		buf.WriteString(cmdField("servicegroup_name", sg.ServicegroupName))
+		buf.WriteString(cmdField("alias", sg.Alias))
+		if sg.Members != 0 {
+			if m := g.resolveServicegroupMembers(sg.ID); m != "" {
+				buf.WriteString(cmdField("members", m))
+			}
+		}
+		if sg.ServicegroupMembers != 0 {
+			if m := g.resolveN2N(sg.ID, "tbl_lnkServicegroupToServicegroup", "tbl_servicegroup", "servicegroup_name"); m != "" {
+				buf.WriteString(cmdField("servicegroup_members", m))
+			}
+		}
+		if sg.Notes != "" {
+			buf.WriteString(cmdField("notes", sg.Notes))
+		}
+		if sg.NotesURL != "" {
+			buf.WriteString(cmdField("notes_url", sg.NotesURL))
+		}
+		if sg.ActionURL != "" {
+			buf.WriteString(cmdField("action_url", sg.ActionURL))
+		}
+		buf.WriteString(cmdField("register", sg.Register))
+		buf.WriteString("}\n\n")
+	}
+	return g.writeWithBackup(outputFile,
+		g.wrapFile("Service group configuration file", buf.Bytes()))
+}
+
+func (g *Generator) WriteHostDependencies(outputFile string) error {
+	var rows []models.Hostdependency
+	if err := g.db.Where("active = '1'").Order("dependent_host_name").Find(&rows).Error; err != nil {
+		return fmt.Errorf("loading hostdependencies: %w", err)
+	}
+	var buf bytes.Buffer
+	for _, hd := range rows {
+		buf.WriteString("define hostdependency {\n")
+		if hd.ConfigName != "" {
+			buf.WriteString(cmdField("#NAGIOSQL_CONFIG_NAME", hd.ConfigName))
+		}
+		if hd.DependentHostName != 0 {
+			if v := g.resolveN2N(hd.ID, "tbl_lnkHostdependencyToHost_DH", "tbl_host", "host_name"); v != "" {
+				buf.WriteString(cmdField("dependent_host_name", v))
+			}
+		}
+		if hd.DependentHostgroupName != 0 {
+			if v := g.resolveN2N(hd.ID, "tbl_lnkHostdependencyToHostgroup_DH", "tbl_hostgroup", "hostgroup_name"); v != "" {
+				buf.WriteString(cmdField("dependent_hostgroup_name", v))
+			}
+		}
+		if hd.HostName != 0 {
+			if v := g.resolveN2N(hd.ID, "tbl_lnkHostdependencyToHost_H", "tbl_host", "host_name"); v != "" {
+				buf.WriteString(cmdField("host_name", v))
+			}
+		}
+		if hd.HostgroupName != 0 {
+			if v := g.resolveN2N(hd.ID, "tbl_lnkHostdependencyToHostgroup_H", "tbl_hostgroup", "hostgroup_name"); v != "" {
+				buf.WriteString(cmdField("hostgroup_name", v))
+			}
+		}
+		buf.WriteString(cmdField("inherits_parent", fmt.Sprintf("%d", hd.InheritsParent)))
+		if hd.ExecutionFailureCriteria != "" {
+			buf.WriteString(cmdField("execution_failure_criteria", hd.ExecutionFailureCriteria))
+		}
+		if hd.NotificationFailureCriteria != "" {
+			buf.WriteString(cmdField("notification_failure_criteria", hd.NotificationFailureCriteria))
+		}
+		if tp := g.resolveTimeperiodName(hd.DependencyPeriod); tp != "" {
+			buf.WriteString(cmdField("dependency_period", tp))
+		}
+		buf.WriteString(cmdField("register", hd.Register))
+		buf.WriteString("}\t\n\n")
+	}
+	return g.writeWithBackup(outputFile,
+		g.wrapFile("Host dependency configuration file", buf.Bytes()))
+}
+
+func (g *Generator) WriteHostEscalations(outputFile string) error {
+	var rows []models.Hostescalation
+	if err := g.db.Where("active = '1'").Order("host_name, hostgroup_name").Find(&rows).Error; err != nil {
+		return fmt.Errorf("loading hostescalations: %w", err)
+	}
+	var buf bytes.Buffer
+	for _, he := range rows {
+		buf.WriteString("define hostescalation {\n")
+		if he.ConfigName != "" {
+			buf.WriteString(cmdField("#NAGIOSQL_CONFIG_NAME", he.ConfigName))
+		}
+		if he.HostName != 0 {
+			if v := g.resolveN2N(he.ID, "tbl_lnkHostescalationToHost", "tbl_host", "host_name"); v != "" {
+				buf.WriteString(cmdField("host_name", v))
+			}
+		}
+		if he.HostgroupName != 0 {
+			if v := g.resolveN2N(he.ID, "tbl_lnkHostescalationToHostgroup", "tbl_hostgroup", "hostgroup_name"); v != "" {
+				buf.WriteString(cmdField("hostgroup_name", v))
+			}
+		}
+		if he.Contacts != 0 {
+			if v := g.resolveN2N(he.ID, "tbl_lnkHostescalationToContact", "tbl_contact", "contact_name"); v != "" {
+				buf.WriteString(cmdField("contacts", v))
+			}
+		}
+		if he.ContactGroups != 0 {
+			if v := g.resolveN2N(he.ID, "tbl_lnkHostescalationToContactgroup", "tbl_contactgroup", "contactgroup_name"); v != "" {
+				buf.WriteString(cmdField("contact_groups", v))
+			}
+		}
+		if he.FirstNotification != nil {
+			buf.WriteString(cmdField("first_notification", fmt.Sprintf("%d", *he.FirstNotification)))
+		}
+		if he.LastNotification != nil {
+			buf.WriteString(cmdField("last_notification", fmt.Sprintf("%d", *he.LastNotification)))
+		}
+		if he.NotificationInterval != nil {
+			buf.WriteString(cmdField("notification_interval", fmt.Sprintf("%d", *he.NotificationInterval)))
+		}
+		if tp := g.resolveTimeperiodName(he.EscalationPeriod); tp != "" {
+			buf.WriteString(cmdField("escalation_period", tp))
+		}
+		if he.EscalationOptions != "" {
+			buf.WriteString(cmdField("escalation_options", he.EscalationOptions))
+		}
+		buf.WriteString(cmdField("register", he.Register))
+		buf.WriteString("}\t\n\n")
+	}
+	return g.writeWithBackup(outputFile,
+		g.wrapFile("Host escalations configuration file", buf.Bytes()))
+}
+
+func (g *Generator) WriteHostExtInfo(outputFile string) error {
+	var rows []models.Hostextinfo
+	if err := g.db.Where("active = '1'").Order("host_name").Find(&rows).Error; err != nil {
+		return fmt.Errorf("loading hostextinfo: %w", err)
+	}
+	var buf bytes.Buffer
+	for _, hi := range rows {
+		buf.WriteString("define hostextinfo {\n")
+		if v := g.resolveHostByID(hi.HostName); v != "" {
+			buf.WriteString(cmdField("host_name", v))
+		}
+		if hi.Notes != "" {
+			buf.WriteString(cmdField("notes", hi.Notes))
+		}
+		if hi.NotesURL != "" {
+			buf.WriteString(cmdField("notes_url", hi.NotesURL))
+		}
+		if hi.ActionURL != "" {
+			buf.WriteString(cmdField("action_url", hi.ActionURL))
+		}
+		if hi.IconImage != "" {
+			buf.WriteString(cmdField("icon_image", hi.IconImage))
+		}
+		if hi.IconImageAlt != "" {
+			buf.WriteString(cmdField("icon_image_alt", hi.IconImageAlt))
+		}
+		if hi.VrmlImage != "" {
+			buf.WriteString(cmdField("vrml_image", hi.VrmlImage))
+		}
+		if hi.StatusmapImage != "" {
+			buf.WriteString(cmdField("statusmap_image", hi.StatusmapImage))
+		}
+		if hi.Coords2D != "" {
+			buf.WriteString(cmdField("2d_coords", hi.Coords2D))
+		}
+		if hi.Coords3D != "" {
+			buf.WriteString(cmdField("3d_coords", hi.Coords3D))
+		}
+		buf.WriteString(cmdField("register", hi.Register))
+		buf.WriteString("}\n\n")
+	}
+	return g.writeWithBackup(outputFile,
+		g.wrapFile("Extended host information configuration file", buf.Bytes()))
+}
+
+func (g *Generator) WriteServiceDependencies(outputFile string) error {
+	var rows []models.Servicedependency
+	if err := g.db.Where("active = '1'").Order("config_name").Find(&rows).Error; err != nil {
+		return fmt.Errorf("loading servicedependencies: %w", err)
+	}
+	var buf bytes.Buffer
+	for _, sd := range rows {
+		buf.WriteString("define servicedependency {\n")
+		if sd.ConfigName != "" {
+			buf.WriteString(cmdField("#NAGIOSQL_CONFIG_NAME", sd.ConfigName))
+		}
+		if sd.DependentHostName != 0 {
+			if v := g.resolveN2N(sd.ID, "tbl_lnkServicedependencyToHost_DH", "tbl_host", "host_name"); v != "" {
+				buf.WriteString(cmdField("dependent_host_name", v))
+			}
+		}
+		if sd.DependentHostgroupName != 0 {
+			if v := g.resolveN2N(sd.ID, "tbl_lnkServicedependencyToHostgroup_DH", "tbl_hostgroup", "hostgroup_name"); v != "" {
+				buf.WriteString(cmdField("dependent_hostgroup_name", v))
+			}
+		}
+		if sd.DependentServiceDescription != 0 {
+			if v := g.resolveStrSlave(sd.ID, "tbl_lnkServicedependencyToService_DS"); v != "" {
+				buf.WriteString(cmdField("dependent_service_description", v))
+			}
+		}
+		if sd.DependentServicegroupName != 0 {
+			if v := g.resolveN2N(sd.ID, "tbl_lnkServicedependencyToServicegroup_DS", "tbl_servicegroup", "servicegroup_name"); v != "" {
+				buf.WriteString(cmdField("dependent_servicegroup_name", v))
+			}
+		}
+		if sd.HostName != 0 {
+			if v := g.resolveN2N(sd.ID, "tbl_lnkServicedependencyToHost_H", "tbl_host", "host_name"); v != "" {
+				buf.WriteString(cmdField("host_name", v))
+			}
+		}
+		if sd.HostgroupName != 0 {
+			if v := g.resolveN2N(sd.ID, "tbl_lnkServicedependencyToHostgroup_H", "tbl_hostgroup", "hostgroup_name"); v != "" {
+				buf.WriteString(cmdField("hostgroup_name", v))
+			}
+		}
+		if sd.ServiceDescription != 0 {
+			if v := g.resolveStrSlave(sd.ID, "tbl_lnkServicedependencyToService_S"); v != "" {
+				buf.WriteString(cmdField("service_description", v))
+			}
+		}
+		if sd.ServicegroupName != 0 {
+			if v := g.resolveN2N(sd.ID, "tbl_lnkServicedependencyToServicegroup_S", "tbl_servicegroup", "servicegroup_name"); v != "" {
+				buf.WriteString(cmdField("servicegroup_name", v))
+			}
+		}
+		buf.WriteString(cmdField("inherits_parent", fmt.Sprintf("%d", sd.InheritsParent)))
+		if sd.ExecutionFailureCriteria != "" {
+			buf.WriteString(cmdField("execution_failure_criteria", sd.ExecutionFailureCriteria))
+		}
+		if sd.NotificationFailureCriteria != "" {
+			buf.WriteString(cmdField("notification_failure_criteria", sd.NotificationFailureCriteria))
+		}
+		if tp := g.resolveTimeperiodName(sd.DependencyPeriod); tp != "" {
+			buf.WriteString(cmdField("dependency_period", tp))
+		}
+		buf.WriteString(cmdField("register", sd.Register))
+		buf.WriteString("}\n\n")
+	}
+	return g.writeWithBackup(outputFile,
+		g.wrapFile("Service dependency configuration file", buf.Bytes()))
+}
+
+func (g *Generator) WriteServiceEscalations(outputFile string) error {
+	var rows []models.Serviceescalation
+	if err := g.db.Where("active = '1'").Order("config_name").Find(&rows).Error; err != nil {
+		return fmt.Errorf("loading serviceescalations: %w", err)
+	}
+	var buf bytes.Buffer
+	for _, se := range rows {
+		buf.WriteString("define serviceescalation {\n")
+		if se.ConfigName != "" {
+			buf.WriteString(cmdField("#NAGIOSQL_CONFIG_NAME", se.ConfigName))
+		}
+		if se.HostName != 0 {
+			if v := g.resolveN2N(se.ID, "tbl_lnkServiceescalationToHost", "tbl_host", "host_name"); v != "" {
+				buf.WriteString(cmdField("host_name", v))
+			}
+		}
+		if se.HostgroupName != 0 {
+			if v := g.resolveN2N(se.ID, "tbl_lnkServiceescalationToHostgroup", "tbl_hostgroup", "hostgroup_name"); v != "" {
+				buf.WriteString(cmdField("hostgroup_name", v))
+			}
+		}
+		if se.ServiceDescription != 0 {
+			if v := g.resolveStrSlave(se.ID, "tbl_lnkServiceescalationToService"); v != "" {
+				buf.WriteString(cmdField("service_description", v))
+			}
+		}
+		if se.ServicegroupName != 0 {
+			if v := g.resolveN2N(se.ID, "tbl_lnkServiceescalationToServicegroup", "tbl_servicegroup", "servicegroup_name"); v != "" {
+				buf.WriteString(cmdField("servicegroup_name", v))
+			}
+		}
+		if se.Contacts != 0 {
+			if v := g.resolveN2N(se.ID, "tbl_lnkServiceescalationToContact", "tbl_contact", "contact_name"); v != "" {
+				buf.WriteString(cmdField("contacts", v))
+			}
+		}
+		if se.ContactGroups != 0 {
+			if v := g.resolveN2N(se.ID, "tbl_lnkServiceescalationToContactgroup", "tbl_contactgroup", "contactgroup_name"); v != "" {
+				buf.WriteString(cmdField("contact_groups", v))
+			}
+		}
+		if se.FirstNotification != nil {
+			buf.WriteString(cmdField("first_notification", fmt.Sprintf("%d", *se.FirstNotification)))
+		}
+		if se.LastNotification != nil {
+			buf.WriteString(cmdField("last_notification", fmt.Sprintf("%d", *se.LastNotification)))
+		}
+		if se.NotificationInterval != nil {
+			buf.WriteString(cmdField("notification_interval", fmt.Sprintf("%d", *se.NotificationInterval)))
+		}
+		if tp := g.resolveTimeperiodName(se.EscalationPeriod); tp != "" {
+			buf.WriteString(cmdField("escalation_period", tp))
+		}
+		if se.EscalationOptions != "" {
+			buf.WriteString(cmdField("escalation_options", se.EscalationOptions))
+		}
+		buf.WriteString(cmdField("register", se.Register))
+		buf.WriteString("}\t\n\n")
+	}
+	return g.writeWithBackup(outputFile,
+		g.wrapFile("Service escalations configuration file", buf.Bytes()))
+}
+
+func (g *Generator) WriteServiceExtInfo(outputFile string) error {
+	var rows []models.Serviceextinfo
+	if err := g.db.Where("active = '1'").Order("host_name").Find(&rows).Error; err != nil {
+		return fmt.Errorf("loading serviceextinfo: %w", err)
+	}
+	var buf bytes.Buffer
+	for _, si := range rows {
+		buf.WriteString("define serviceextinfo {\n")
+		if v := g.resolveHostByID(si.HostName); v != "" {
+			buf.WriteString(cmdField("host_name", v))
+		}
+		if v := g.resolveServiceByID(si.ServiceDescription); v != "" {
+			buf.WriteString(cmdField("service_description", v))
+		}
+		if si.Notes != "" {
+			buf.WriteString(cmdField("notes", si.Notes))
+		}
+		if si.NotesURL != "" {
+			buf.WriteString(cmdField("notes_url", si.NotesURL))
+		}
+		if si.ActionURL != "" {
+			buf.WriteString(cmdField("action_url", si.ActionURL))
+		}
+		if si.IconImage != "" {
+			buf.WriteString(cmdField("icon_image", si.IconImage))
+		}
+		if si.IconImageAlt != "" {
+			buf.WriteString(cmdField("icon_image_alt", si.IconImageAlt))
+		}
+		buf.WriteString(cmdField("register", si.Register))
+		buf.WriteString("}\n\n")
+	}
+	return g.writeWithBackup(outputFile,
+		g.wrapFile("Extended service information configuration file", buf.Bytes()))
 }
 
 // writeWithBackup copies the existing file to backup/ then overwrites it.
