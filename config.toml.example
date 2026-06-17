@@ -1,36 +1,106 @@
-# NagiosQL configuration file
-# Copy to config.toml and edit before running.
-# All values can be overridden with NAGIOSQL_<SECTION>_<KEY> environment variables.
-# Example: NAGIOSQL_DATABASE_PASSWORD=secret
+# go-nagiosql configuration
+# ─────────────────────────────────────────────────────────────────────────────
+# Copy this file to config.toml and edit before running.
+#
+# Every key can be overridden with an environment variable:
+#   NAGIOSQL_<SECTION>_<KEY>=value
+#
+# Examples:
+#   NAGIOSQL_DATABASE_PASSWORD=secret
+#   NAGIOSQL_JWT_SECRET=my-random-string
+#   NAGIOSQL_SERVER_PORT=9090
+# ─────────────────────────────────────────────────────────────────────────────
 
+# ── HTTP Server ──────────────────────────────────────────────────────────────
 [server]
+
+# TCP port the API listens on.
 port = 8081
-dev  = false   # set true for verbose logging and pretty output
 
+# Enable Echo's debug logger and pretty-print JSON responses.
+# Always false in production.
+dev = false
+
+
+# ── JWT Authentication ────────────────────────────────────────────────────────
 [jwt]
-secret           = "change-me-use-at-least-32-random-characters"
-access_ttl_min   = 15    # access token lifetime in minutes
-refresh_ttl_days = 7     # refresh token lifetime in days (httpOnly cookie)
 
+# HMAC-SHA256 signing secret.
+# Must be at least 32 random characters. Changing this invalidates all
+# outstanding tokens immediately — every logged-in user will be logged out.
+# Generate with: openssl rand -hex 32
+secret = "change-me-use-at-least-32-random-characters"
+
+# Lifetime of the Bearer access token sent in the Authorization header.
+# Short values (10–30 min) limit the exposure window if a token is stolen.
+access_ttl_min = 15
+
+# Lifetime of the httpOnly refresh cookie used to obtain new access tokens.
+# The refresh endpoint rotates the cookie on each use.
+refresh_ttl_days = 7
+
+
+# ── Database ──────────────────────────────────────────────────────────────────
 [database]
-host     = "db"
-port     = 3306
-name     = "nagiosql"
-user     = "nagiosql"
+
+# MariaDB / MySQL host. Use "localhost" for a local socket or "db" when
+# running inside Docker Compose alongside the database service.
+host = "db"
+
+# MariaDB port (default: 3306).
+port = 3306
+
+# Database name. Must exist before running `nagiosql migrate`.
+name = "nagiosql"
+
+# Database user. Needs CREATE, ALTER, INSERT, UPDATE, DELETE, INDEX privileges.
+user = "nagiosql"
+
+# Database password. Leave empty only for local dev with no authentication.
 password = ""
 
+
+# ── Nagios Core Integration ───────────────────────────────────────────────────
 [nagios]
-base_dir          = "/usr/local/nagios"
-config_file       = "/usr/local/nagios/etc/nagios.cfg"
-cgi_file          = "/usr/local/nagios/etc/cgi.cfg"
-resource_file     = "/usr/local/nagios/etc/resource.cfg"
-# reload_trigger is a plain file polled by reload-watcher.sh.
-# Writing to it triggers a graceful Nagios reload.
-# Do NOT set this to nagios.cmd (the external command FIFO).
-reload_trigger    = "/usr/local/nagios/var/reload.trigger"
-binary            = "/usr/local/nagios/bin/nagios"
-pid_file          = "/usr/local/nagios/var/nagios.lock"
-host_config_dir   = "/usr/local/nagios/etc/nagiosql/hosts/"
+
+# Root installation directory of Nagios Core.
+base_dir = "/usr/local/nagios"
+
+# Main Nagios configuration file, passed to `nagios -v` during verify.
+config_file = "/usr/local/nagios/etc/nagios.cfg"
+
+# CGI configuration file (used by the Nagios web interface, not by this API).
+cgi_file = "/usr/local/nagios/etc/cgi.cfg"
+
+# Resource file that defines $USERn$ macros (paths to plugins, etc.).
+resource_file = "/usr/local/nagios/etc/resource.cfg"
+
+# Plain file polled by reload-watcher.sh (supervisord companion script).
+# When this file is touched, the watcher sends SIGHUP to the Nagios daemon,
+# triggering a graceful configuration reload.
+#
+# ⚠  Do NOT point this at nagios.cmd (the external command FIFO).
+#    Writing to a FIFO from Go without a reader blocks forever (deadlock).
+reload_trigger = "/usr/local/nagios/var/reload.trigger"
+
+# Path to the nagios binary, used only for `nagios -v` config verification.
+binary = "/usr/local/nagios/bin/nagios"
+
+# PID file written by the Nagios daemon; used to check whether Nagios is running.
+pid_file = "/usr/local/nagios/var/nagios.lock"
+
+# Directory where generated host .cfg files are written (one file per host).
+# Must be included in nagios.cfg via: cfg_dir=<host_config_dir>
+host_config_dir = "/usr/local/nagios/etc/nagiosql/hosts/"
+
+# Directory where generated service .cfg files are written (one file per group).
+# Must be included in nagios.cfg via: cfg_dir=<service_config_dir>
 service_config_dir = "/usr/local/nagios/etc/nagiosql/services/"
-backup_dir        = "/usr/local/nagios/etc/nagiosql/backup/"
-import_dir        = "/usr/local/nagios/etc/import/"
+
+# Directory for automatic backups. Before any .cfg file is overwritten,
+# the previous version is copied here with a timestamp suffix (.bak).
+backup_dir = "/usr/local/nagios/etc/nagiosql/backup/"
+
+# Directory scanned when running `nagiosql import` or POST /api/v1/import.
+# Place existing Nagios .cfg files here to import them into the database.
+import_dir = "/usr/local/nagios/etc/import/"

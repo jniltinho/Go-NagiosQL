@@ -1,663 +1,399 @@
-# Nagios Core 4 + NagiosQL 3.5 — Stack Docker Compose
+# go-nagiosql — Reference Documentation
 
-Stack completo de monitoramento com **Nagios Core 4.5.13**, **NagiosQL 3.5.0** e **MariaDB 10.11**, rodando em **2 containers** Docker sobre Debian trixie-slim.
-
-> Para entender o fluxo interno de como o NagiosQL gera configs e o Nagios as carrega, consulte o [DIAGRAMA_NAGIOSQL.md](docs/DIAGRAMA_NAGIOSQL.md).
-
----
-
-## Sumário
-
-- [Visão geral](#visão-geral)
-- [Pré-requisitos](#pré-requisitos)
-- [Estrutura do projeto](#estrutura-do-projeto)
-- [Configuração inicial](#configuração-inicial)
-- [Subindo o stack](#subindo-o-stack)
-- [Acessando as interfaces](#acessando-as-interfaces)
-- [Credenciais padrão](#credenciais-padrão)
-- [Volumes e dados persistentes](#volumes-e-dados-persistentes)
-- [Gerenciamento do stack](#gerenciamento-do-stack)
-- [Adicionando hosts e serviços](#adicionando-hosts-e-serviços)
-- [Reload do Nagios Core](#reload-do-nagios-core)
-- [Rebuild das imagens](#rebuild-das-imagens)
-- [Solução de problemas](#solução-de-problemas)
-- [Modelo de permissões e segurança](#modelo-de-permissões-e-segurança)
-- [Arquitetura interna do container](#arquitetura-interna-do-container)
+This document is the detailed reference for the Go rewrite of NagiosQL.
+For a project overview and quick start, see the [root README](../README.md).
 
 ---
 
-## Visão geral
+## Table of Contents
 
-| Componente | Versão | Porta host |
-|---|---|---|
-| Nagios Core | 4.5.13 | 8080 |
-| NagiosQL | 3.5.0 | 8081 |
-| MariaDB | 10.11 | (interno) |
-| Nginx | 1.26 | — |
-| PHP | 8.4 | — |
-
-**Nagios Core** e **NagiosQL** rodam no **mesmo container** (`nagios-core`), gerenciados pelo supervisord. Essa é a arquitetura natural do NagiosQL, que foi projetado para rodar na mesma máquina que o Nagios Core: acessa os arquivos `.cfg` e o binário diretamente, sem volumes compartilhados ou workarounds de rede.
-
-O MariaDB fica em um container separado (`nagios-db`), acessado pelo NagiosQL via hostname `db`.
+- [Configuration](#configuration)
+- [API Reference](#api-reference)
+  - [Authentication](#authentication)
+  - [Hosts](#hosts)
+  - [Services](#services)
+  - [Commands](#commands)
+  - [Contacts](#contacts)
+  - [Timeperiods](#timeperiods)
+  - [Groups](#groups)
+  - [Templates](#templates)
+  - [Variable Definitions](#variable-definitions)
+  - [Users](#users)
+  - [Settings](#settings)
+  - [Config Generation](#config-generation)
+  - [Import](#import)
+  - [Monitoring](#monitoring)
+  - [Logbook](#logbook)
+- [Migrating from PHP NagiosQL](#migrating-from-php-nagiosql)
+- [Docker](#docker)
+- [Security Notes](#security-notes)
+- [PHP NagiosQL Docs](#php-nagiosql-docs)
 
 ---
 
-## Pré-requisitos
+## Configuration
 
-- Docker Engine 24+
-- `docker-compose` standalone v2+ **ou** plugin `docker compose`
-- Usuário com permissão para executar `docker`
-- Portas 8080 e 8081 livres no host
+All settings live in `config.toml`. Copy `config.toml.example` as a starting point.
+Every key can be overridden with an environment variable using the `NAGIOSQL_` prefix.
 
-Verificar:
+```toml
+[server]
+port = 8081
+dev  = false   # enables Echo debug logger
+
+[jwt]
+secret           = "CHANGE-ME-to-a-random-string-of-at-least-32-chars"
+access_ttl_min   = 15       # Bearer token lifetime (minutes)
+refresh_ttl_days = 7        # httpOnly cookie lifetime (days)
+
+[database]
+host     = "127.0.0.1"
+port     = 3306
+name     = "nagiosql"
+user     = "nagiosql"
+password = "nagiosql"
+
+[nagios]
+base_dir           = "/usr/local/nagios"
+config_file        = "/usr/local/nagios/etc/nagios.cfg"
+host_config_dir    = "/usr/local/nagios/etc/hosts/"
+service_config_dir = "/usr/local/nagios/etc/services/"
+backup_dir         = "/usr/local/nagios/etc/backup/"
+import_dir         = "/usr/local/nagios/etc/import/"
+# reload_trigger is a plain file — touching it signals a reload watcher.
+# NEVER point this at nagios.cmd (FIFO deadlock risk).
+reload_trigger     = "/usr/local/nagios/var/reload.trigger"
+binary             = "/usr/local/nagios/bin/nagios"
+pid_file           = "/usr/local/nagios/var/nagios.lock"
+```
+
+### Environment variable override
+
+Every key maps to `NAGIOSQL_<SECTION>_<KEY>`:
 
 ```bash
-docker --version
-docker-compose --version   # standalone
-# ou
-docker compose version     # plugin
-```
-
----
-
-## Estrutura do projeto
-
-```
-projeto_base/
-├── build.sh                    # Constrói a imagem nagios-core:latest (sem subir containers)
-├── docker/
-│   └── nagios-core/
-│       ├── docker-compose.yml  # Define os serviços nagios e db
-│       ├── nagios/
-│       │   ├── Dockerfile          # Multi-stage: builder (compila + .deb) → runtime (instala .deb)
-│       │   ├── build-debs.sh       # Compila Nagios Core, Plugins e empacota NagiosQL como .deb
-│       │   ├── entrypoint.sh       # Inicializa volumes, importa schema, inicia supervisord
-│       │   ├── nginx.conf          # Dois server blocks: :80 (Nagios Core) e :8081 (NagiosQL)
-│       │   ├── supervisord.conf    # Gerencia 5 processos: nginx, php-fpm, fcgiwrap, nagios, reload-watcher
-│       │   ├── reload-watcher.sh   # Monitora reload.trigger, valida nagios.cfg e envia SIGHUP ao Nagios
-│       │   └── etc-extra/          # Configs de exemplo embutidas na imagem
-│       │       └── nagiosql/
-│       │           ├── commands.cfg         # check_dns customizado
-│       │           ├── hosts/               # 4 hosts de exemplo (gateway, dns, linux-host)
-│       │           └── services/            # Serviços PING, HTTP, SSH, DNS
-│       ├── nagiosql/           # Código-fonte NagiosQL 3.5.0 (contexto de build)
-│       ├── .env.example        # Modelo de variáveis de ambiente
-│       └── volumes/            # Dados persistentes (bind mounts — não versionar)
-│           ├── db-data/                # Dados do MariaDB
-│           ├── nagios-etc/             # Configs do Nagios (/usr/local/nagios/etc)
-│           ├── nagios-var/             # Runtime do Nagios (status.dat, logs, spool)
-│           ├── nagios-plugins/         # Plugins compilados (/usr/local/nagios/libexec)
-│           └── nagiosql-config/        # Config do NagiosQL (settings.php, fieldvars.php, CSS, locale)
-├── docs/
-│   ├── DIAGRAMA_NAGIOSQL.md        # Fluxo completo NagiosQL → Nagios Core
-│   ├── BUILD_NAGIOS_TRIXIE.md      # Roteiro de build manual no Debian trixie
-│   ├── BUILD_NAGIOS_TRIXIE_COMPLETE.md
-│   ├── INSTALL_NAGIOSCORE4.md      # Instalação do Nagios Core 4 no Ubuntu 24.04 com Nginx
-│   ├── INSTALL_NAGIOSQL.md
-│   ├── NAGIOS_BUILD_COMMANDS.md    # Comandos de compilação passo a passo
-│   └── NAGIOSQL_DEBIAN_PACKAGING.md
-├── .gitignore
-└── README.md                   # Este arquivo
+NAGIOSQL_DATABASE_HOST=10.0.0.1
+NAGIOSQL_JWT_SECRET=mysecret
+NAGIOSQL_SERVER_PORT=9090
+NAGIOSQL_NAGIOS_HOST_CONFIG_DIR=/etc/nagios/hosts/
 ```
 
 ---
 
-## Configuração inicial
+## API Reference
 
-### 1. Copiar e editar o arquivo de variáveis de ambiente
+All protected endpoints require:
 
-```bash
-cp docker/nagios-core/.env.example docker/nagios-core/.env
-nano docker/nagios-core/.env   # ou seu editor preferido
+```
+Authorization: Bearer <access_token>
 ```
 
-Variáveis disponíveis:
+### Authentication
 
-```ini
-# MariaDB
-MYSQL_ROOT_PASSWORD=rootpassword_mude_aqui
-MYSQL_DATABASE=nagiosql
-MYSQL_USER=nagiosql
-MYSQL_PASSWORD=nagiosqlpass_mude_aqui
-DB_PORT=3306
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/auth/login` | Obtain access + refresh tokens |
+| POST | `/api/v1/auth/logout` | Revoke refresh cookie |
+| POST | `/api/v1/auth/refresh` | Exchange refresh cookie for new access token |
 
-# Nagios Core — senha do usuário nagiosadmin na interface web
-NAGIOS_ADMIN_PASSWORD=nagiosadmin_mude_aqui
-
-# NagiosQL — usuário e senha do admin da interface web
-NAGIOSQL_USER=admin
-NAGIOSQL_PASSWORD=admin_mude_aqui
-
-# Portas publicadas no host
-NAGIOS_PORT=8080
-NAGIOSQL_PORT=8081
+**Login request:**
+```json
+{ "username": "admin", "password": "admin123" }
 ```
 
-> **Atenção:** Troque todas as senhas antes de usar em produção. O arquivo `.env` está no `.gitignore` e nunca deve ser versionado.
+**Login response (success):**
+```json
+{
+  "access_token": "eyJ...",
+  "token_type": "Bearer",
+  "expires_in": 900
+}
+```
 
-### 2. Verificar se as portas estão livres
+**Login response (legacy MD5 password):**
+```json
+{ "requires_password_reset": true }
+```
+No token is issued. The user must reset their password via `PUT /api/v1/users/:id/password` before continuing.
 
-```bash
-ss -tlnp | grep -E '8080|8081'
+---
+
+### Hosts
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/hosts` | List hosts (paginated) |
+| POST | `/api/v1/hosts` | Create host |
+| GET | `/api/v1/hosts/:id` | Get host |
+| PUT | `/api/v1/hosts/:id` | Update host |
+| DELETE | `/api/v1/hosts/:id` | Delete host |
+
+**Create host (minimal):**
+```json
+{
+  "host_name": "web01",
+  "alias": "Web Server 01",
+  "address": "10.0.0.1",
+  "active_checks_enabled": 1,
+  "max_check_attempts": 3
+}
 ```
 
 ---
 
----
+### Services
 
-## Subindo o stack
-
-### Build e start (primeira vez)
-
-```bash
-cd docker/nagios-core
-docker-compose up -d --build
-```
-
-O processo:
-1. **Stage builder** — compila Nagios Core 4.5.13 e Plugins 2.5 do fonte, empacota os três componentes como `.deb` via `build-debs.sh` (pode levar 3–5 min)
-2. **Stage runtime** — parte do `debian:trixie-slim` limpo, instala apenas dependências de execução e os `.deb` gerados; ferramentas de compilação não entram na imagem final
-3. Sobe o MariaDB e aguarda o healthcheck
-4. Sobe o container `nagios-core`, que no entrypoint:
-   - Inicializa os volumes de configs, plugins e runtime
-   - Aguarda a porta 3306 do MariaDB via `nc`
-   - Importa o schema SQL, os dados de exemplo e configura os caminhos (primeira execução)
-   - Cria o usuário admin do NagiosQL
-   - Gera o `settings.php` com as credenciais do `.env`
-   - Valida o `nagios.cfg` e inicia o supervisord
-
-Acompanhar logs em tempo real:
-
-```bash
-# a partir de docker/nagios-core/
-docker-compose logs -f
-```
-
-### Verificar status dos containers
-
-```bash
-# a partir de docker/nagios-core/
-docker-compose ps
-```
-
-Saída esperada:
-
-```
-NAME          IMAGE                 STATUS
-nagios-core   projeto_base-nagios   Up X minutes
-nagios-db     mariadb:10.11         Up X minutes (healthy)
-```
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/services` | List services |
+| POST | `/api/v1/services` | Create service |
+| GET | `/api/v1/services/:id` | Get service |
+| PUT | `/api/v1/services/:id` | Update service |
+| DELETE | `/api/v1/services/:id` | Delete service |
 
 ---
 
-## Acessando as interfaces
+### Commands
 
-| Interface | URL | Descrição |
-|---|---|---|
-| Nagios Core | http://localhost:8080 | Monitoramento (redireciona para tac.cgi) |
-| NagiosQL | http://localhost:8081 | Gerenciamento de configurações |
-
-> Se estiver acessando de outra máquina, substitua `localhost` pelo IP do host Docker.
-
----
-
-## Credenciais padrão
-
-### Nagios Core (autenticação HTTP Basic)
-
-| Campo | Valor padrão |
-|---|---|
-| Usuário | `nagiosadmin` |
-| Senha | valor de `NAGIOS_ADMIN_PASSWORD` no `.env` (padrão: `nagiosadmin`) |
-
-### NagiosQL (formulário de login)
-
-| Campo | Valor padrão |
-|---|---|
-| Usuário | valor de `NAGIOSQL_USER` no `.env` (padrão: `admin`) |
-| Senha | valor de `NAGIOSQL_PASSWORD` no `.env` (padrão: `admin`) |
-
-> As senhas padrão são definidas no `docker/nagios-core/.env.example`. Caso o `.env` não exista, o stack usa os fallbacks codificados no `docker-compose.yml`.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/commands` | List commands |
+| POST | `/api/v1/commands` | Create command |
+| GET | `/api/v1/commands/:id` | Get command |
+| PUT | `/api/v1/commands/:id` | Update command |
+| DELETE | `/api/v1/commands/:id` | Delete command |
 
 ---
 
-## Volumes e dados persistentes
+### Contacts
 
-Todos os dados ficam em subdiretórios de `docker/nagios-core/volumes/` (bind mounts locais):
-
-| Diretório | Caminho no container | Conteúdo |
-|---|---|---|
-| `docker/nagios-core/volumes/db-data` | `/var/lib/mysql` | Banco de dados MariaDB completo |
-| `docker/nagios-core/volumes/nagios-etc` | `/usr/local/nagios/etc` | Arquivos `.cfg` do Nagios, htpasswd |
-| `docker/nagios-core/volumes/nagios-var` | `/usr/local/nagios/var` | status.dat, logs, spool, nagios.lock |
-| `docker/nagios-core/volumes/nagios-plugins` | `/usr/local/nagios/libexec` | Plugins compilados (check_ping, check_http…) |
-| `docker/nagios-core/volumes/nagiosql-config` | `/var/www/nagiosql/config` | settings.php, fieldvars.php, CSS, locale |
-
-Os volumes são inicializados automaticamente no primeiro boot:
-
-- **nagios-etc:** copiado de `/usr/local/nagios/etc.default`, que inclui as configs de exemplo de `etc-extra/` (hosts, serviços, comandos)
-- **nagios-plugins:** copiado de `/usr/local/nagios/libexec.default`; `check_ping` e `check_icmp` têm setuid root (necessário para raw sockets ICMP); inclui `check_fping`, `check_snmp`, `check_mysql` e `check_mysql_query` além dos plugins padrão
-- **nagios-var:** diretórios `rw/`, `spool/checkresults/` e `archives/` criados pelo entrypoint
-- **nagiosql-config:** inicializado a partir de `config.default/` (preserva `fieldvars.php`, CSS, locale); `settings.php` gerado com as variáveis do `.env`
-- **db-data:** schema importado, dados de exemplo pré-carregados (24 comandos, 5 timeperiods, templates `linux-server`/`generic-service`, 4 hosts, 21 serviços), caminhos configurados e usuário admin criado na primeira execução
-
-### Backup
-
-```bash
-# Backup das configs do Nagios
-tar -czf backup-nagios-etc-$(date +%Y%m%d).tar.gz docker/nagios-core/volumes/nagios-etc/
-
-# Backup do banco de dados
-docker exec nagios-db \
-    mysqldump -u root -p"${MYSQL_ROOT_PASSWORD}" nagiosql \
-    > backup-nagiosql-$(date +%Y%m%d).sql
-```
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/contacts` | List contacts |
+| POST | `/api/v1/contacts` | Create contact |
+| GET | `/api/v1/contacts/:id` | Get contact |
+| PUT | `/api/v1/contacts/:id` | Update contact |
+| DELETE | `/api/v1/contacts/:id` | Delete contact |
 
 ---
 
-## Gerenciamento do stack
+### Timeperiods
 
-Todos os comandos `docker-compose` devem ser executados a partir do diretório `docker/nagios-core/`.
-
-### Parar o stack (sem remover dados)
-
-```bash
-cd docker/nagios-core
-docker-compose stop
-```
-
-### Iniciar o stack parado
-
-```bash
-cd docker/nagios-core
-docker-compose start
-```
-
-### Parar e remover containers (volumes preservados)
-
-```bash
-cd docker/nagios-core
-docker-compose down
-```
-
-### Destruir tudo, incluindo os dados
-
-```bash
-cd docker/nagios-core
-docker-compose down
-rm -rf ./volumes/
-```
-
-> **Atenção:** Sempre execute `docker-compose down` **antes** de apagar `./volumes/`. Remover `db-data/` enquanto o MariaDB está rodando deixa o banco num estado corrompido em memória, causando falhas na próxima inicialização. Os dados são apagados irreversivelmente.
-
-### Ver logs de um container específico
-
-```bash
-# a partir de docker/nagios-core/
-docker-compose logs -f nagios
-docker-compose logs -f db
-```
-
-### Abrir shell em um container
-
-```bash
-docker exec -it nagios-core bash
-docker exec -it nagios-db bash
-```
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/timeperiods` | List timeperiods |
+| POST | `/api/v1/timeperiods` | Create timeperiod (with inline ranges) |
+| GET | `/api/v1/timeperiods/:id` | Get timeperiod |
+| PUT | `/api/v1/timeperiods/:id` | Update timeperiod |
+| DELETE | `/api/v1/timeperiods/:id` | Delete timeperiod |
 
 ---
 
-## Adicionando hosts e serviços
+### Groups
 
-O stack já sobe com **5 hosts e 16 serviços** de exemplo configurados (gateway, google-dns, cloudflare-dns, linux-host, localhost). Para adicionar novos, há duas formas:
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/hostgroups` | List hostgroups |
+| POST | `/api/v1/hostgroups` | Create hostgroup |
+| GET | `/api/v1/hostgroups/:id` | Get hostgroup |
+| PUT | `/api/v1/hostgroups/:id` | Update hostgroup |
+| DELETE | `/api/v1/hostgroups/:id` | Delete hostgroup |
+| POST | `/api/v1/hostgroups/:id/members` | Add host to hostgroup |
+| GET | `/api/v1/servicegroups` | List servicegroups |
+| POST | `/api/v1/servicegroups` | Create servicegroup |
+| GET | `/api/v1/servicegroups/:id` | Get servicegroup |
+| DELETE | `/api/v1/servicegroups/:id` | Delete servicegroup |
+| GET | `/api/v1/contactgroups` | List contactgroups |
+| POST | `/api/v1/contactgroups` | Create contactgroup |
+| GET | `/api/v1/contactgroups/:id` | Get contactgroup |
+| DELETE | `/api/v1/contactgroups/:id` | Delete contactgroup |
 
-### Via NagiosQL (recomendado)
+---
 
-Acesse http://localhost:8081, faça login e use os menus:
+### Templates
 
-- **Monitoring → Hosts** — cadastrar hosts
-- **Monitoring → Services** — cadastrar serviços
-- **Monitoring → Write Config Files** — gerar os arquivos `.cfg`
-- **Monitoring → Verify Configuration** — validar antes de aplicar
-- **Monitoring → Restart Nagios** — recarregar o Nagios Core
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/hosttemplates` | List host templates |
+| POST | `/api/v1/hosttemplates` | Create host template |
+| GET | `/api/v1/hosttemplates/:id` | Get host template |
+| DELETE | `/api/v1/hosttemplates/:id` | Delete host template |
+| GET | `/api/v1/servicetemplates` | List service templates |
+| POST | `/api/v1/servicetemplates` | Create service template |
+| DELETE | `/api/v1/servicetemplates/:id` | Delete service template |
+| GET | `/api/v1/contacttemplates` | List contact templates |
+| POST | `/api/v1/contacttemplates` | Create contact template |
+| DELETE | `/api/v1/contacttemplates/:id` | Delete contact template |
 
-O banco já vem com templates prontos para uso: `linux-server`, `windows-server`, `generic-host`, `generic-service`, `local-service`, além de 24 comandos e 5 timeperiods. Ao cadastrar um novo host basta selecionar o template desejado.
+---
 
-> Para entender o fluxo completo de como os dados percorrem o NagiosQL até o monitoramento, consulte o [DIAGRAMA_NAGIOSQL.md](docs/DIAGRAMA_NAGIOSQL.md).
+### Variable Definitions
 
-### Via arquivos `.cfg` diretamente
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/variables` | List variable definitions |
+| POST | `/api/v1/variables` | Create variable definition |
+| GET | `/api/v1/variables/:id` | Get variable definition |
+| PUT | `/api/v1/variables/:id` | Update variable definition |
+| DELETE | `/api/v1/variables/:id` | Delete variable definition |
 
-Os arquivos gerenciados pelo NagiosQL ficam em:
+---
+
+### Users
+
+> Admin role required for all user management endpoints.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/users` | List users |
+| POST | `/api/v1/users` | Create user (bcrypt cost 12) |
+| GET | `/api/v1/users/:id` | Get user |
+| PUT | `/api/v1/users/:id/password` | Change user password |
+| DELETE | `/api/v1/users/:id` | Delete user |
+
+**Change password:**
+```json
+{ "new_password": "hunter2" }
+```
+
+A user cannot delete their own account.
+
+---
+
+### Settings
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/settings` | Get global settings (any authenticated user) |
+| PUT | `/api/v1/settings` | Update global settings (admin only) |
+
+---
+
+### Config Generation
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/config/write` | Generate all `.cfg` files from DB |
+| POST | `/api/v1/config/verify` | Run `nagios -v nagios.cfg` |
+| POST | `/api/v1/config/restart` | Touch `reload_trigger` to signal reload |
+
+The config generator produces output format-compatible with the original PHP NagiosQL:
 
 ```
-docker/nagios-core/volumes/nagios-etc/nagiosql/
-├── hosts/          ← um arquivo .cfg por host
-├── services/       ← um arquivo .cfg por serviço (ou grupo)
-├── commands.cfg    ← comandos customizados
-├── contacts.cfg    ← contatos
-└── hosttemplates.cfg, servicetemplates.cfg, etc.
-```
-
-Exemplo de host (`docker/nagios-core/volumes/nagios-etc/nagiosql/hosts/meuhost.cfg`):
-
-```nagios
 define host {
     use                 linux-server
-    host_name           meuhost
-    alias               Meu Servidor Linux
-    address             192.168.1.10
+    host_name           web01
+    alias               Web Server 01
+    address             10.0.0.1
     max_check_attempts  3
-    check_interval      5
-    retry_interval      1
     contact_groups      admins
 }
 ```
 
-Exemplo de serviço (`docker/nagios-core/volumes/nagios-etc/nagiosql/services/ping.cfg`):
-
-```nagios
-define service {
-    use                  local-service
-    host_name            meuhost
-    service_description  PING
-    check_command        check_ping!100.0,20%!500.0,60%
-    max_check_attempts   3
-    contact_groups       admins
-}
-```
-
-Após criar ou editar arquivos, **valide e recarregue** conforme a seção abaixo.
+- Template names are resolved from the `tbl_lnkHostToHosttemplate` join table.
+- Contact groups and host links are resolved from their respective link tables.
+- Fields with value `2` (inherit from template) are silently omitted.
+- `register` is only written for template objects (`register 0`).
+- Existing files are automatically backed up to `nagios.backup_dir` before overwriting.
 
 ---
 
-## Reload do Nagios Core
+### Import
 
-### Via NagiosQL (recomendado)
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/import` | Import Nagios `.cfg` files into the database |
 
-Use o menu **Monitoring → Restart Nagios**. O `reload-watcher.sh` intercepta a solicitação, **valida o `nagios.cfg` automaticamente** antes de enviar o SIGHUP. Se a configuração contiver erros, o reload é cancelado e o Nagios continua operando com a configuração anterior.
-
-Para ver o resultado da validação:
-
-```bash
-docker logs nagios-core | grep reload-watcher
-```
-
-Saída esperada após um reload bem-sucedido:
-```
-[reload-watcher] Config válido. SIGHUP enviado ao PID 51
-```
-
-Se houver erro de configuração:
-```
-[reload-watcher] ERRO: nagios.cfg inválido — reload cancelado.
-```
-
-### Validar a configuração manualmente
-
-```bash
-docker exec nagios-core su -s /bin/bash nagios -c \
-    "/usr/local/nagios/bin/nagios -v /usr/local/nagios/etc/nagios.cfg"
-```
-
-Saída esperada no final:
-```
-Total Warnings: 0
-Total Errors:   0
-Things look okay - No serious problems were detected during the pre-flight check
-```
-
-### Recarregar manualmente (sem downtime)
-
-```bash
-docker exec nagios-core supervisorctl signal HUP nagios
-```
-
-O reload é feito via SIGHUP: o Nagios Core relê todos os arquivos `.cfg` sem interromper os checks em execução.
-
----
-
-## Rebuild das imagens
-
-O Dockerfile usa **multi-stage build**: o stage `builder` compila e gera os `.deb`; o stage `runtime` apenas instala esses pacotes. Ferramentas de compilação (gcc, make, etc.) não entram na imagem final.
-
-O `build-debs.sh` é executado automaticamente pelo builder e gera:
-
-| Pacote | Tamanho |
-|---|---|
-| `nagios-core_4.5.13_amd64.deb` | ~1.7 MB |
-| `nagios-plugins_2.5_amd64.deb` | ~900 KB |
-| `nagiosql_3.5.0_all.deb` | ~5.3 MB |
-
-### Rebuild após alterar o Dockerfile, build-debs.sh ou configs
-
-```bash
-# A partir de docker/nagios-core/
-
-# Rebuild sem cache (garante atualização total)
-docker-compose build --no-cache
-
-# Rebuild com cache (reutiliza camadas inalteradas — mais rápido)
-docker-compose build
-
-# Alternativa: script simples na raiz do projeto — gera apenas a imagem (sem subir containers)
-./build.sh             # com cache
-./build.sh --no-cache  # sem cache
-```
-
-O Docker cache funciona por camada: se apenas o `build-debs.sh` mudar, o `apt-get install` do builder é reutilizado. Se apenas o código do NagiosQL mudar, as etapas de compilação do Nagios Core e Plugins são reutilizadas.
-
-### Aplicar rebuild sem parar o banco de dados
-
-```bash
-# a partir de docker/nagios-core/
-docker-compose up -d --no-deps --build nagios
-```
-
-> **Atenção:** Ao rebuildar o `nagios`, os volumes **não são apagados**. Para forçar reinicialização dos plugins (ex.: após adicionar `check_snmp`, `check_mysql` ou alterar a versão compilada), limpe o volume e reinicie:
->
-> ```bash
-> # a partir de docker/nagios-core/
-> docker-compose stop nagios
-> docker run --rm \
->   -v $(pwd)/volumes/nagios-plugins:/vol \
->   debian:trixie-slim sh -c "find /vol -mindepth 1 -delete"
-> docker-compose up -d
-> ```
-
----
-
-## Solução de problemas
-
-### Container nagios-core não sobe
-
-Verificar os logs:
-
-```bash
-docker-compose logs nagios | grep -E "Error|error|FATAL"
-```
-
-Causas comuns e soluções:
-
-| Erro | Causa | Solução |
-|---|---|---|
-| `Check result path ... is not a valid directory` | Volume `nagios-var` vazio, faltam subdiretórios | O entrypoint cria automaticamente; reiniciar o container |
-| `Could not read object configuration data` | Arquivo `.cfg` com sintaxe inválida | Validar com `nagios -v nagios.cfg` |
-| `Could not open pipe` no check_ping | `iputils-ping` não instalado no build | Rebuild com `--no-cache` |
-
-### Nagios Core mostra hosts DOWN com "You need more args!!!"
-
-O plugin `check_ping` precisa do setuid root para abrir raw sockets. Verificar:
-
-```bash
-# a partir de docker/nagios-core/
-ls -la ./volumes/nagios-plugins/check_ping
-# deve mostrar: -r-sr-xr-x 1 root nagios
-```
-
-Se o owner for `nagios` em vez de `root`, limpe o volume de plugins e faça rebuild:
-
-```bash
-# a partir de docker/nagios-core/
-docker-compose stop nagios
-docker run --rm \
-  -v $(pwd)/volumes/nagios-plugins:/vol \
-  debian:trixie-slim sh -c "find /vol -mindepth 1 -delete"
-docker-compose up -d
-```
-
-### NagiosQL redireciona para /install/index.php
-
-O registro de versão no banco não existe. Inserir manualmente:
-
-```bash
-docker exec nagios-db mysql -u nagiosql -pnagiosqlpass nagiosql \
-    -e "INSERT INTO tbl_settings (category, name, value) \
-        VALUES ('db','version','3.5.0') \
-        ON DUPLICATE KEY UPDATE value='3.5.0';"
-```
-
-### NagiosQL retorna erro 500 após login (admin.php)
-
-O volume `nagiosql-config` está incompleto — falta o `fieldvars.php`. Limpar e reiniciar:
-
-```bash
-# a partir de docker/nagios-core/
-docker-compose stop nagios
-docker run --rm \
-  -v $(pwd)/volumes/nagiosql-config:/vol \
-  debian:trixie-slim sh -c "find /vol -mindepth 1 -delete"
-docker-compose up -d
-```
-
-### Verificar processos dentro do container
-
-```bash
-docker exec nagios-core supervisorctl status
-```
-
-Saída esperada:
-
-```
-fcgiwrap                         RUNNING   pid XXXX, uptime 0:XX:XX
-nagios                           RUNNING   pid XXXX, uptime 0:XX:XX
-nginx                            RUNNING   pid XXXX, uptime 0:XX:XX
-php-fpm                          RUNNING   pid XXXX, uptime 0:XX:XX
-reload-watcher                   RUNNING   pid XXXX, uptime 0:XX:XX
-```
-
-### Testar check manualmente
-
-```bash
-# check_ping
-docker exec nagios-core su -s /bin/bash nagios -c \
-    "/usr/local/nagios/libexec/check_ping -H 8.8.8.8 -w 200.0,20% -c 500.0,60% -p 3"
-
-# check_http
-docker exec nagios-core su -s /bin/bash nagios -c \
-    "/usr/local/nagios/libexec/check_http -H google.com"
-
-# check_ssh
-docker exec nagios-core su -s /bin/bash nagios -c \
-    "/usr/local/nagios/libexec/check_ssh 192.168.1.9"
-```
-
-### NagiosQL "Restart Nagios" não aplicou as mudanças
-
-O `reload-watcher.sh` valida o `nagios.cfg` antes de recarregar. Se a configuração contiver erros, o reload é silenciosamente cancelado. Verificar:
-
-```bash
-docker logs nagios-core | grep reload-watcher | tail -5
-```
-
-Se a saída mostrar `ERRO: nagios.cfg inválido`, valide manualmente para ver a mensagem de erro completa:
-
-```bash
-docker exec nagios-core su -s /bin/bash nagios -c \
-    "/usr/local/nagios/bin/nagios -v /usr/local/nagios/etc/nagios.cfg"
-```
-
-Corrija os erros no NagiosQL, regenere os arquivos (**Monitoring → Write Config Files**) e tente novamente.
-
-### Ver estatísticas do Nagios em tempo real
-
-```bash
-docker exec nagios-core /usr/local/nagios/bin/nagiostats
+```json
+{ "dir": "/etc/nagios/objects", "overwrite": false }
 ```
 
 ---
 
-## Modelo de permissões e segurança
+### Monitoring
 
-O stack usa dois grupos Unix para separar responsabilidades:
-
-| Grupo | GID | Membros | Para que serve |
-|---|---|---|---|
-| `nagios` | 3000 | `nagios` | Grupo primário do daemon Nagios; controla acesso aos binários e runtime |
-| `nagioscfg` | 3001 | `nagios`, `www-data` | Grupo compartilhado para escrita nos diretórios de configuração gerados pelo NagiosQL |
-
-**Por que dois grupos?** O `www-data` (PHP/NagiosQL) precisa escrever nos diretórios `etc/nagiosql/` para gerar os arquivos `.cfg`. Adicioná-lo ao grupo `nagios` daria acesso excessivo (binários, socket de comandos externos). O grupo `nagioscfg` limita o acesso exatamente ao necessário.
-
-O pipe de comandos externos (`var/rw/nagios.cmd`) usa o grupo `nagioscfg` via SGID no diretório `var/rw/`, o que permite ao NagiosQL enviar comandos ao Nagios quando necessário.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/monitoring/summary` | Object counts (hosts, services, contacts, …) |
 
 ---
 
-## Arquitetura interna do container
+### Logbook
 
-### Container `nagios-core`
-
-Contém **Nagios Core 4.5.13** e **NagiosQL 3.5.0** no mesmo container, gerenciados pelo **supervisord** com 5 processos:
-
-| Processo | Função |
-|---|---|
-| `nginx` | Dois server blocks: porta 80 (Nagios Core) e porta 8081 (NagiosQL) |
-| `php-fpm` | Executa scripts PHP — tanto a UI do Nagios quanto o NagiosQL |
-| `fcgiwrap` | Executa os CGIs do Nagios (tac.cgi, status.cgi, etc.) |
-| `nagios` | Processo principal do Nagios Core |
-| `reload-watcher` | Monitora `reload.trigger`, valida `nagios.cfg` e envia SIGHUP ao Nagios |
-
-O mecanismo de reload funciona assim: o NagiosQL escreve no arquivo `reload.trigger` → o `reload-watcher.sh` detecta a mudança → **valida o `nagios.cfg` com `nagios -v`** → se válido, envia `SIGHUP` ao Nagios → o Nagios relê todas as configs sem downtime. Se a validação falhar, o reload é cancelado e o Nagios permanece com a configuração anterior, protegendo o monitoramento em produção.
-
-Por rodarem no mesmo container, o NagiosQL acessa `/usr/local/nagios/` diretamente — sem volumes compartilhados entre containers, sem latência de rede, exatamente como foi projetado.
-
-### Container `nagios-db`
-
-MariaDB 10.11 dedicado ao NagiosQL. Expõe apenas a porta 3306 na rede interna `nagios-net`.
-
-### Rede interna
-
-```
-Host
-├── :8080 → nagios-core:80    (Nginx → Nagios CGIs via fcgiwrap)
-└── :8081 → nagios-core:8081  (Nginx → NagiosQL PHP via php-fpm)
-
-nagios-core ──── nagios-net ────→ nagios-db:3306
-```
-
-### Hosts e serviços de exemplo incluídos
-
-A imagem já contém configurações iniciais em `docker/nagios-core/nagios/etc-extra/`, copiadas para o volume no primeiro boot:
-
-| Host | Endereço | Serviços monitorados |
-|---|---|---|
-| `localhost` | 127.0.0.1 | PING, Disk, Load, Users, Procs, Swap, SSH, HTTP |
-| `linux-host` | 192.168.1.9 | PING, HTTP, SSH |
-| `gateway` | 192.168.1.1 | PING |
-| `google-dns` | 8.8.8.8 | PING, DNS |
-| `cloudflare-dns` | 1.1.1.1 | PING, DNS |
-
-Para customizar os hosts de exemplo antes do primeiro boot, edite os arquivos em `docker/nagios-core/nagios/etc-extra/nagiosql/` e faça rebuild da imagem.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/logbook` | List audit log entries |
 
 ---
 
-## Documentação adicional
+## Migrating from PHP NagiosQL
 
-| Arquivo | Descrição |
-|---|---|
-| [README.md](README.md) | Este guia de operação |
-| [docs/DIAGRAMA_NAGIOSQL.md](docs/DIAGRAMA_NAGIOSQL.md) | Fluxo completo: formulário → banco → .cfg → reload → monitoramento |
-| [docs/INSTALL_NAGIOSCORE4.md](docs/INSTALL_NAGIOSCORE4.md) | Instalação manual do Nagios Core 4 no Ubuntu 24.04 com Nginx |
-| [docs/INSTALL_NAGIOSQL.md](docs/INSTALL_NAGIOSQL.md) | Instalação manual do NagiosQL |
-| [docs/BUILD_NAGIOS_TRIXIE.md](docs/BUILD_NAGIOS_TRIXIE.md) | Roteiro de compilação manual no Debian trixie |
-| [docs/BUILD_NAGIOS_TRIXIE_COMPLETE.md](docs/BUILD_NAGIOS_TRIXIE_COMPLETE.md) | Roteiro completo de build (incluindo plugins e NagiosQL) |
-| [docs/NAGIOS_BUILD_COMMANDS.md](docs/NAGIOS_BUILD_COMMANDS.md) | Comandos de compilação passo a passo |
-| [docs/NAGIOSQL_DEBIAN_PACKAGING.md](docs/NAGIOSQL_DEBIAN_PACKAGING.md) | Empacotamento do NagiosQL como .deb |
+go-nagiosql is designed to be a drop-in backend replacement for the PHP application.
+
+### Steps
+
+1. **Keep the existing database.** go-nagiosql uses the same `tbl_*` tables as the PHP version. No data migration is required.
+
+2. **Run `nagiosql migrate`.** This calls GORM's `AutoMigrate`, which adds any missing columns without dropping or altering existing data.
+
+3. **Handle legacy passwords.** Accounts whose passwords are stored as MD5 hashes will trigger a `{requires_password_reset: true}` response on login — no token is issued. Use `PUT /api/v1/users/:id/password` to set a new bcrypt password.
+
+4. **Point the reverse proxy.** Once the Go API is verified working, stop the PHP/nginx stack and proxy your domain to port `8081`.
+
+5. **Config file format.** The Go generator produces byte-for-byte compatible output with the PHP NagiosQL config writer, so existing Nagios Core installations need no changes.
+
+---
+
+## Docker
+
+### Production image
+
+```bash
+docker build -t go-nagiosql .
+docker run -p 8081:8081 \
+  -v $(pwd)/config.toml:/app/config.toml:ro \
+  go-nagiosql
+```
+
+The image uses a two-stage Alpine build (`CGO_ENABLED=0`) and produces a ~16 MB binary with no external dependencies.
+
+### Full Nagios stack (docker-compose)
+
+`docker-compose.override.yml` adds `go-nagiosql` as a sidecar to the existing Nagios Core compose stack:
+
+```bash
+cp docker-compose.override.yml docker/nagios-core/docker-compose.override.yml
+cd docker/nagios-core
+docker compose up -d
+```
+
+Use `config.toml.docker` as the mounted config — it points paths to the shared `nagios-etc` and `nagios-var` volumes already defined in the Nagios Core compose file.
+
+---
+
+## Security Notes
+
+| Topic | Behavior |
+|-------|----------|
+| **Passwords** | bcrypt cost 12 for all new/reset passwords. MD5 legacy hashes are never upgraded automatically. |
+| **JWT secrets** | Must be at least 32 characters. Rotate by changing `jwt.secret` and restarting — all outstanding tokens are immediately invalidated. |
+| **Refresh token** | Stored as an `httpOnly` cookie; never exposed to JavaScript. |
+| **reload_trigger** | Must be a regular file, not `nagios.cmd`. Writing to the command FIFO from Go causes a deadlock. The reload watcher (supervisord or a shell loop) should read this file and issue the actual `nagios -s` signal. |
+| **Config backups** | Every `.cfg` file overwrite is preceded by a timestamped backup in `nagios.backup_dir`. |
+| **Admin endpoints** | User management and settings writes require the `admin` role embedded in the JWT claim. |
+
+---
+
+## PHP NagiosQL Docs
+
+The `docs/` directory contains the original PHP NagiosQL infrastructure documentation:
+
+| File | Description |
+|------|-------------|
+| [DIAGRAMA_NAGIOSQL.md](docs/DIAGRAMA_NAGIOSQL.md) | Full architecture diagram and 8-step config lifecycle |
+| [INSTALL_NAGIOSCORE4.md](docs/INSTALL_NAGIOSCORE4.md) | Building and installing Nagios Core 4 from source |
+| [INSTALL_NAGIOSQL.md](docs/INSTALL_NAGIOSQL.md) | Installing PHP NagiosQL |
+| [BUILD_NAGIOS_TRIXIE.md](docs/BUILD_NAGIOS_TRIXIE.md) | Building on Debian Trixie |
+| [BUILD_NAGIOS_TRIXIE_COMPLETE.md](docs/BUILD_NAGIOS_TRIXIE_COMPLETE.md) | Complete build walkthrough |
+| [NAGIOS_BUILD_COMMANDS.md](docs/NAGIOS_BUILD_COMMANDS.md) | Reference build commands |
+| [NAGIOSQL_DEBIAN_PACKAGING.md](docs/NAGIOSQL_DEBIAN_PACKAGING.md) | Debian packaging notes |
