@@ -1,4 +1,4 @@
-# go-nagiosql
+# Go-NagiosQL
 
 A Go rewrite of [NagiosQL](https://www.nagiosql.org/) — a web-based configuration manager for Nagios/Icinga.
 
