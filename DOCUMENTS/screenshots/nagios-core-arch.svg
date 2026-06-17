@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="480" viewBox="0 0 900 480">
+  <defs>
+    <filter id="sh" x="-10%" y="-20%" width="130%" height="160%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+    <marker id="ag" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#22C55E"/>
+    </marker>
+    <marker id="ay" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#FBBF24"/>
+    </marker>
+    <marker id="ao" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#FB923C"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="480" rx="16" fill="#0F172A"/>
+
+  <!-- Title -->
+  <text x="450" y="36" font-family="system-ui,sans-serif" font-size="20" font-weight="700" fill="#F1F5F9" text-anchor="middle">Nagios Core 4 — Architecture</text>
+  <text x="450" y="57" font-family="system-ui,sans-serif" font-size="11" fill="#475569" text-anchor="middle">Config files · Daemon scheduler · Plugin checks · Notifications</text>
+
+  <!-- Lane backgrounds -->
+  <rect x="10" y="68" width="226" height="400" rx="10" fill="#22C55E" opacity="0.05"/>
+  <rect x="244" y="68" width="286" height="400" rx="10" fill="#1E293B" opacity="0.35"/>
+  <rect x="538" y="68" width="352" height="400" rx="10" fill="#FBBF24" opacity="0.04"/>
+
+  <!-- Lane labels -->
+  <text x="123" y="86" font-family="system-ui,sans-serif" font-size="9" font-weight="700" fill="#22C55E" text-anchor="middle" letter-spacing="2">CONFIGURATION</text>
+  <text x="387" y="86" font-family="system-ui,sans-serif" font-size="9" font-weight="700" fill="#94A3B8" text-anchor="middle" letter-spacing="2">CORE DAEMON</text>
+  <text x="714" y="86" font-family="system-ui,sans-serif" font-size="9" font-weight="700" fill="#FBBF24" text-anchor="middle" letter-spacing="2">OUTPUTS</text>
+
+  <!-- ═══ CONFIGURATION FILES ═══ -->
+  <!-- Main config -->
+  <rect x="20" y="106" width="206" height="44" rx="8" fill="#0A2E14" stroke="#22C55E" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="123" y="124" font-family="system-ui,sans-serif" font-size="11" font-weight="700" fill="#22C55E" text-anchor="middle">nagios.cfg</text>
+  <text x="123" y="141" font-family="system-ui,sans-serif" font-size="9" fill="#86EFAC" text-anchor="middle">main daemon config</text>
+
+  <!-- hosts -->
+  <rect x="20" y="168" width="206" height="44" rx="8" fill="#0A2E14" stroke="#22C55E" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="123" y="186" font-family="system-ui,sans-serif" font-size="11" font-weight="700" fill="#22C55E" text-anchor="middle">hosts/*.cfg</text>
+  <text x="123" y="203" font-family="system-ui,sans-serif" font-size="9" fill="#86EFAC" text-anchor="middle">host definitions · templates</text>
+
+  <!-- services -->
+  <rect x="20" y="230" width="206" height="44" rx="8" fill="#0A2E14" stroke="#22C55E" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="123" y="248" font-family="system-ui,sans-serif" font-size="11" font-weight="700" fill="#22C55E" text-anchor="middle">services/*.cfg</text>
+  <text x="123" y="265" font-family="system-ui,sans-serif" font-size="9" fill="#86EFAC" text-anchor="middle">service definitions · commands</text>
+
+  <!-- timeperiods + contacts -->
+  <rect x="20" y="292" width="206" height="44" rx="8" fill="#0A2E14" stroke="#22C55E" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="123" y="310" font-family="system-ui,sans-serif" font-size="11" font-weight="700" fill="#22C55E" text-anchor="middle">timeperiods.cfg</text>
+  <text x="123" y="327" font-family="system-ui,sans-serif" font-size="9" fill="#86EFAC" text-anchor="middle">schedules · contact groups</text>
+
+  <!-- resource.cfg -->
+  <rect x="20" y="354" width="206" height="44" rx="8" fill="#0A2E14" stroke="#22C55E" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="123" y="372" font-family="system-ui,sans-serif" font-size="11" font-weight="700" fill="#22C55E" text-anchor="middle">resource.cfg</text>
+  <text x="123" y="389" font-family="system-ui,sans-serif" font-size="9" fill="#86EFAC" text-anchor="middle">$USERn$ macro definitions</text>
+
+  <!-- ═══ CORE DAEMON (pipeline) ═══ -->
+  <!-- Config Parser -->
+  <rect x="254" y="106" width="266" height="44" rx="8" fill="#1E293B" stroke="#64748B" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="387" y="124" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#CBD5E1" text-anchor="middle">Config Parser</text>
+  <text x="387" y="141" font-family="system-ui,sans-serif" font-size="9" fill="#64748B" text-anchor="middle">reads and validates all .cfg files</text>
+
+  <!-- Scheduler -->
+  <rect x="254" y="178" width="266" height="44" rx="8" fill="#1E293B" stroke="#64748B" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="387" y="196" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#CBD5E1" text-anchor="middle">Object Scheduler</text>
+  <text x="387" y="213" font-family="system-ui,sans-serif" font-size="9" fill="#64748B" text-anchor="middle">check_interval · retry_interval · timeperiods</text>
+
+  <!-- Check Dispatcher -->
+  <rect x="254" y="250" width="266" height="44" rx="8" fill="#1E293B" stroke="#64748B" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="387" y="268" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#CBD5E1" text-anchor="middle">Check Dispatcher</text>
+  <text x="387" y="285" font-family="system-ui,sans-serif" font-size="9" fill="#64748B" text-anchor="middle">forks plugin · collects return code + output</text>
+
+  <!-- Event Processor -->
+  <rect x="254" y="322" width="266" height="44" rx="8" fill="#1E293B" stroke="#64748B" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="387" y="340" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#CBD5E1" text-anchor="middle">Event Processor</text>
+  <text x="387" y="357" font-family="system-ui,sans-serif" font-size="9" fill="#64748B" text-anchor="middle">state changes · event handlers · status data</text>
+
+  <!-- Notification Engine -->
+  <rect x="254" y="394" width="266" height="44" rx="8" fill="#1E293B" stroke="#64748B" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="387" y="412" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#CBD5E1" text-anchor="middle">Notification Engine</text>
+  <text x="387" y="429" font-family="system-ui,sans-serif" font-size="9" fill="#64748B" text-anchor="middle">on-call logic · escalation · contact methods</text>
+
+  <!-- ═══ OUTPUTS ═══ -->
+  <!-- Plugin checks -->
+  <rect x="548" y="250" width="300" height="44" rx="8" fill="#1C1A07" stroke="#FBBF24" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="698" y="268" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#FBBF24" text-anchor="middle">Plugin Execution</text>
+  <text x="698" y="285" font-family="system-ui,sans-serif" font-size="9" fill="#FCD34D" text-anchor="middle">check_ping · check_http · check_disk · ...</text>
+
+  <!-- Status data -->
+  <rect x="548" y="322" width="300" height="44" rx="8" fill="#1C1A07" stroke="#FBBF24" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="698" y="340" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#FBBF24" text-anchor="middle">Status Data  ·  Web UI</text>
+  <text x="698" y="357" font-family="system-ui,sans-serif" font-size="9" fill="#FCD34D" text-anchor="middle">status.dat · CGI scripts via fcgiwrap</text>
+
+  <!-- Notifications -->
+  <rect x="548" y="394" width="300" height="44" rx="8" fill="#1C1A07" stroke="#FB923C" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="698" y="412" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#FB923C" text-anchor="middle">Notifications</text>
+  <text x="698" y="429" font-family="system-ui,sans-serif" font-size="9" fill="#FDBA74" text-anchor="middle">email · SMS · PagerDuty · webhook</text>
+
+  <!-- ═══ ARROWS ═══ -->
+  <!-- All config files → Config Parser (fan-in) -->
+  <line x1="226" y1="128" x2="252" y2="128" stroke="#22C55E" stroke-width="1.5" marker-end="url(#ag)"/>
+  <line x1="226" y1="190" x2="244" y2="190" stroke="#22C55E" stroke-width="1" opacity="0.6"/>
+  <line x1="244" y1="190" x2="244" y2="128" stroke="#22C55E" stroke-width="1" opacity="0.6"/>
+  <line x1="226" y1="252" x2="244" y2="252" stroke="#22C55E" stroke-width="1" opacity="0.6"/>
+  <line x1="244" y1="252" x2="244" y2="128" stroke="#22C55E" stroke-width="1" opacity="0.5"/>
+  <line x1="226" y1="314" x2="244" y2="314" stroke="#22C55E" stroke-width="1" opacity="0.6"/>
+  <line x1="244" y1="314" x2="244" y2="128" stroke="#22C55E" stroke-width="1" opacity="0.4"/>
+  <line x1="226" y1="376" x2="244" y2="376" stroke="#22C55E" stroke-width="1" opacity="0.6"/>
+  <line x1="244" y1="376" x2="244" y2="128" stroke="#22C55E" stroke-width="1" opacity="0.3"/>
+
+  <!-- Pipeline arrows (Config Parser → Scheduler → ... ) -->
+  <line x1="387" y1="150" x2="387" y2="176" stroke="#64748B" stroke-width="1.5" marker-end="url(#ag)"/>
+  <line x1="387" y1="222" x2="387" y2="248" stroke="#64748B" stroke-width="1.5" marker-end="url(#ag)"/>
+  <line x1="387" y1="294" x2="387" y2="320" stroke="#64748B" stroke-width="1.5" marker-end="url(#ag)"/>
+  <line x1="387" y1="366" x2="387" y2="392" stroke="#64748B" stroke-width="1.5" marker-end="url(#ag)"/>
+
+  <!-- Check Dispatcher → Plugin Execution -->
+  <line x1="520" y1="272" x2="546" y2="272" stroke="#FBBF24" stroke-width="1.5" marker-end="url(#ay)"/>
+
+  <!-- Event Processor → Status Data -->
+  <line x1="520" y1="344" x2="546" y2="344" stroke="#FBBF24" stroke-width="1.5" marker-end="url(#ay)"/>
+
+  <!-- Notification Engine → Notifications -->
+  <line x1="520" y1="416" x2="546" y2="416" stroke="#FB923C" stroke-width="1.5" marker-end="url(#ao)"/>
+
+  <!-- Plugin results feed back to Event Processor -->
+  <path d="M 698,250 V 236 H 530 V 310 H 546" fill="none" stroke="#FBBF24" stroke-width="1" stroke-dasharray="4,3" opacity="0.5" marker-end="url(#ay)"/>
+  <text x="614" y="230" font-family="system-ui,sans-serif" font-size="8" fill="#FBBF24" text-anchor="middle" opacity="0.7">check result</text>
+</svg>

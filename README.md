@@ -6,24 +6,19 @@ A Go rewrite of [NagiosQL](https://www.nagiosql.org/) — a web-based configurat
 
 ---
 
-## What it does
+## Architecture
 
-go-nagiosql exposes a REST API that replaces the PHP NagiosQL web interface.
-It manages every Nagios object type in MariaDB and generates the `.cfg` files
-that Nagios Core reads, matching the exact output format of the original PHP application.
+### Go-NagiosQL
 
-```
-Client → JWT Auth → Echo v5 API → GORM / MariaDB
-                                       ↓
-                              Config Generator
-                                       ↓
-                        /etc/nagios/hosts/*.cfg
-                        /etc/nagios/services/*.cfg
-                                       ↓
-                           reload_trigger (file)
-                                       ↓
-                              Nagios Core daemon
-```
+![Go-NagiosQL Architecture](DOCUMENTS/screenshots/go-nagiosql-arch.svg)
+
+### PHP NagiosQL (reference)
+
+![PHP NagiosQL Architecture](DOCUMENTS/screenshots/php-nagiosql-arch.svg)
+
+### Nagios Core 4
+
+![Nagios Core 4 Architecture](DOCUMENTS/screenshots/nagios-core-arch.svg)
 
 ---
 
