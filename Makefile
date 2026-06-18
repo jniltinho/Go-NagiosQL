@@ -6,7 +6,7 @@ LDFLAGS  := -s -w \
 	-X main.Version=$(VERSION) \
 	-X main.BuildDate=$(BUILDDATE)
 
-.PHONY: all build clean tidy fmt vet lint swagger test test-integration db-start db-stop db-reset server-start server-stop test-api check
+.PHONY: all build clean tidy fmt vet lint swagger test test-integration db-start db-stop db-reset server-start server-stop test-api check docker-up docker-down docker-logs nagioscore-up nagioscore-down
 
 all: build
 
@@ -87,10 +87,22 @@ test-api: build
 ## check: vet + build + test (CI entry point)
 check: vet build test
 
-## docker-up: start the full Nagios Docker dev stack
+## docker-up: build and start the go-nagiosql stack (nagios4 + API + MariaDB)
 docker-up:
+	docker compose -f docker/go-nagiosql/docker-compose.yml up -d --build
+
+## docker-down: stop the go-nagiosql stack
+docker-down:
+	docker compose -f docker/go-nagiosql/docker-compose.yml down
+
+## docker-logs: tail logs from the go-nagiosql stack
+docker-logs:
+	docker compose -f docker/go-nagiosql/docker-compose.yml logs -f
+
+## nagioscore-up: start the reference nagios-core stack (DOCUMENTS/)
+nagioscore-up:
 	docker compose -f DOCUMENTS/docker/nagios-core/docker-compose.yml up -d
 
-## docker-down: stop the full Nagios Docker dev stack
-docker-down:
+## nagioscore-down: stop the reference nagios-core stack
+nagioscore-down:
 	docker compose -f DOCUMENTS/docker/nagios-core/docker-compose.yml down

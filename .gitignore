@@ -23,6 +23,7 @@ coverage.html
 
 # DB volume data (PHP NagiosQL docker stack — permission-restricted)
 DOCUMENTS/docker/nagios-core/volumes
+docker/go-nagiosql/volumes
 
 # Go module stub that prevents ./... from recursing into DOCUMENTS
 DOCUMENTS/go.mod

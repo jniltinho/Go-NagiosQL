@@ -1,0 +1,34 @@
+# Baked into /opt/nagiosql/config.toml inside the container.
+# Override individual values with NAGIOSQL_<SECTION>_<KEY> env vars.
+
+[server]
+port = 8081
+dev  = false
+
+[jwt]
+# Overridden at runtime by NAGIOSQL_JWT_SECRET env var.
+secret           = "change-me-to-at-least-32-random-chars!!"
+access_ttl_min   = 15
+refresh_ttl_days = 7
+
+[database]
+# Overridden at runtime by NAGIOSQL_DATABASE_* env vars.
+host     = "db"
+port     = 3306
+name     = "nagiosql"
+user     = "nagiosql"
+password = "nagiosqlpass"
+
+[nagios]
+base_dir           = "/etc/nagios4"
+config_file        = "/etc/nagios4/nagios.cfg"
+cgi_file           = "/etc/nagios4/cgi.cfg"
+resource_file      = "/etc/nagios4/resource.cfg"
+# reload_trigger: plain file polled by reload-watcher.sh — NOT nagios.cmd FIFO.
+reload_trigger     = "/var/lib/nagios4/rw/reload.trigger"
+binary             = "/usr/sbin/nagios4"
+pid_file           = "/run/nagios4/nagios4.pid"
+host_config_dir    = "/etc/nagiosql/hosts/"
+service_config_dir = "/etc/nagiosql/services/"
+backup_dir         = "/etc/nagiosql/backup/"
+import_dir         = "/etc/nagios4/conf.d/"

@@ -5,6 +5,7 @@ package migrations
 
 import (
 	"fmt"
+	"strings"
 
 	"go-nagiosql/internal/models"
 	"gorm.io/gorm"
@@ -13,8 +14,15 @@ import (
 // Migrate creates or updates every NagiosQL table via AutoMigrate.
 // It is idempotent and safe to run on an already-migrated database.
 func Migrate(db *gorm.DB) error {
-	if err := db.AutoMigrate(models.AllModels()...); err != nil {
-		return fmt.Errorf("AutoMigrate: %w", err)
+	// Migrate each model individually so a "table already exists" from MariaDB
+	// on a previously-migrated schema does not abort the whole migration.
+	for _, model := range models.AllModels() {
+		if err := db.AutoMigrate(model); err != nil {
+			if strings.Contains(err.Error(), "already exists") {
+				continue
+			}
+			return fmt.Errorf("AutoMigrate: %w", err)
+		}
 	}
 	return nil
 }

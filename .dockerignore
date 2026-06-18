@@ -1,0 +1,19 @@
+# Volumes de dados dos stacks Docker (podem ter permissões root)
+DOCUMENTS/docker/nagios-core/volumes/
+docker/go-nagiosql/volumes/
+
+# Artefatos de build e dev
+bin/
+*.pdf
+*.html
+
+# Testes e CI
+test/
+.agents/
+
+# Git
+.git/
+
+# Editor
+.vscode/
+.idea/

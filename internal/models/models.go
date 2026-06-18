@@ -81,5 +81,43 @@ func AllModels() []any {
 
 		// Link tables — timeperiod
 		&LnkTimeperiodToTimeperiod{},
+
+		// Extended object tables
+		&Hostdependency{},
+		&Hostescalation{},
+		&Hostextinfo{},
+		&Servicedependency{},
+		&Serviceescalation{},
+		&Serviceextinfo{},
+
+		// Link tables — hostdependency
+		&LnkHostdependencyToHostDH{},
+		&LnkHostdependencyToHostgroupDH{},
+		&LnkHostdependencyToHostH{},
+		&LnkHostdependencyToHostgroupH{},
+
+		// Link tables — hostescalation
+		&LnkHostescalationToHost{},
+		&LnkHostescalationToHostgroup{},
+		&LnkHostescalationToContact{},
+		&LnkHostescalationToContactgroup{},
+
+		// Link tables — servicedependency
+		&LnkServicedependencyToHostDH{},
+		&LnkServicedependencyToHostgroupDH{},
+		&LnkServicedependencyToServiceDS{},
+		&LnkServicedependencyToServicegroupDS{},
+		&LnkServicedependencyToHostH{},
+		&LnkServicedependencyToHostgroupH{},
+		&LnkServicedependencyToServiceS{},
+		&LnkServicedependencyToServicegroupS{},
+
+		// Link tables — serviceescalation
+		&LnkServiceescalationToHost{},
+		&LnkServiceescalationToHostgroup{},
+		&LnkServiceescalationToService{},
+		&LnkServiceescalationToServicegroup{},
+		&LnkServiceescalationToContact{},
+		&LnkServiceescalationToContactgroup{},
 	}
 }

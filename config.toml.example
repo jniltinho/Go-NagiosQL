@@ -63,17 +63,17 @@ password = ""
 # ── Nagios Core Integration ───────────────────────────────────────────────────
 [nagios]
 
-# Root installation directory of Nagios Core.
-base_dir = "/usr/local/nagios"
+# Root installation directory of Nagios Core (Debian apt package).
+base_dir = "/etc/nagios4"
 
 # Main Nagios configuration file, passed to `nagios -v` during verify.
-config_file = "/usr/local/nagios/etc/nagios.cfg"
+config_file = "/etc/nagios4/nagios.cfg"
 
 # CGI configuration file (used by the Nagios web interface, not by this API).
-cgi_file = "/usr/local/nagios/etc/cgi.cfg"
+cgi_file = "/etc/nagios4/cgi.cfg"
 
 # Resource file that defines $USERn$ macros (paths to plugins, etc.).
-resource_file = "/usr/local/nagios/etc/resource.cfg"
+resource_file = "/etc/nagios4/resource.cfg"
 
 # Plain file polled by reload-watcher.sh (supervisord companion script).
 # When this file is touched, the watcher sends SIGHUP to the Nagios daemon,
@@ -81,26 +81,26 @@ resource_file = "/usr/local/nagios/etc/resource.cfg"
 #
 # ⚠  Do NOT point this at nagios.cmd (the external command FIFO).
 #    Writing to a FIFO from Go without a reader blocks forever (deadlock).
-reload_trigger = "/usr/local/nagios/var/reload.trigger"
+reload_trigger = "/var/lib/nagios4/rw/reload.trigger"
 
 # Path to the nagios binary, used only for `nagios -v` config verification.
-binary = "/usr/local/nagios/bin/nagios"
+binary = "/usr/sbin/nagios4"
 
 # PID file written by the Nagios daemon; used to check whether Nagios is running.
-pid_file = "/usr/local/nagios/var/nagios.lock"
+pid_file = "/run/nagios4/nagios4.pid"
 
 # Directory where generated host .cfg files are written (one file per host).
 # Must be included in nagios.cfg via: cfg_dir=<host_config_dir>
-host_config_dir = "/usr/local/nagios/etc/nagiosql/hosts/"
+host_config_dir = "/etc/nagiosql/hosts/"
 
 # Directory where generated service .cfg files are written (one file per group).
 # Must be included in nagios.cfg via: cfg_dir=<service_config_dir>
-service_config_dir = "/usr/local/nagios/etc/nagiosql/services/"
+service_config_dir = "/etc/nagiosql/services/"
 
 # Directory for automatic backups. Before any .cfg file is overwritten,
 # the previous version is copied here with a timestamp suffix (.bak).
-backup_dir = "/usr/local/nagios/etc/nagiosql/backup/"
+backup_dir = "/etc/nagiosql/backup/"
 
 # Directory scanned when running `nagiosql import` or POST /api/v1/import.
 # Place existing Nagios .cfg files here to import them into the database.
-import_dir = "/usr/local/nagios/etc/import/"
+import_dir = "/etc/nagios4/conf.d/"

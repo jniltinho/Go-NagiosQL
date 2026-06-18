@@ -13,7 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY nagios/build-debs.sh /build-debs.sh
-COPY nagiosql/ /nagiosql-src/
+COPY nagiosql.tar.gz /tmp/nagiosql.tar.gz
+RUN mkdir -p /nagiosql-src \
+    && tar -xzf /tmp/nagiosql.tar.gz --strip-components=1 -C /nagiosql-src \
+    && rm /tmp/nagiosql.tar.gz
 RUN chmod +x /build-debs.sh && /build-debs.sh
 
 # ════════════════════════════════════════════════════════════════
