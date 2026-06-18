@@ -1,24 +1,24 @@
 #!/bin/bash
-# Monitora /usr/local/nagios/var/reload.trigger e recarrega o Nagios quando acionado.
-# O NagiosQL grava esse arquivo ao salvar configurações (via commandfile no tbl_configtarget).
-# Valida nagios.cfg antes de enviar SIGHUP — evita quebrar monitoramento por config inválida.
-# Ref: NAGIOSQL_DEBIAN_PACKAGING.md §Validation Workflow
+# Monitora /var/lib/nagios4/rw/reload.trigger e recarrega o Nagios quando acionado.
+# O NagiosQL grava esse arquivo ao salvar configurações (campo commandfile em tbl_configtarget).
+# O dir rw/ tem grupo www-data (Debian nagios4 padrão) — Apache pode criar o arquivo.
+# Valida nagios.cfg antes de enviar SIGHUP — evita quebrar o monitoramento.
 
-TRIGGER=/usr/local/nagios/var/reload.trigger
-NAGIOS_CFG=/usr/local/nagios/etc/nagios.cfg
-NAGIOS_BIN=/usr/local/nagios/bin/nagios
+TRIGGER=/var/lib/nagios4/rw/reload.trigger
+NAGIOS_CFG=/etc/nagios4/nagios.cfg
+NAGIOS_BIN=/usr/sbin/nagios4
 
 while true; do
-    if [ -f "$TRIGGER" ]; then
-        rm -f "$TRIGGER"
+    # -s: file exists AND is non-empty (NagiosQL wrote RESTART_PROGRAM to it)
+    if [ -s "$TRIGGER" ]; then
+        # Truncate immediately so NagiosQL can write again without waiting
+        > "$TRIGGER"
         echo "[reload-watcher] Reload solicitado pelo NagiosQL..."
 
-        # pgrep em vez de lock file: mais robusto — independente do lock_file path
-        # compilado (Nagios 4.x default é /run/nagios.lock, dir root-owned)
-        PID=$(pgrep -x nagios 2>/dev/null | head -1)
+        PID=$(pgrep -x nagios4 2>/dev/null | head -1)
 
         if [ -z "$PID" ]; then
-            echo "[reload-watcher] Nagios não está rodando"
+            echo "[reload-watcher] nagios4 não está rodando"
         elif ! "$NAGIOS_BIN" -v "$NAGIOS_CFG" >/dev/null 2>&1; then
             echo "[reload-watcher] ERRO: $NAGIOS_CFG inválido — reload cancelado." \
                  "Corrija o erro no NagiosQL antes de tentar novamente."

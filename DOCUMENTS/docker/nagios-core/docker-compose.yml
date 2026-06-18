@@ -41,9 +41,10 @@ services:
       NAGIOSQL_USER:         ${NAGIOSQL_USER:-admin}
       NAGIOSQL_PASSWORD:     ${NAGIOSQL_PASSWORD:-admin}
     volumes:
-      - ./volumes/nagios-etc:/usr/local/nagios/etc
-      - ./volumes/nagios-var:/usr/local/nagios/var
-      - ./volumes/nagios-plugins:/usr/local/nagios/libexec
+      - ./volumes/nagios-etc:/etc/nagios4         # config principal do daemon
+      - ./volumes/nagiosql-etc:/etc/nagiosql       # configs gerados pelo NagiosQL
+      - ./volumes/nagios-var:/var/lib/nagios4      # runtime: status, cmd pipe, spool
+      - ./volumes/nagios-plugins:/usr/lib/nagios/plugins
       - ./volumes/nagiosql-config:/var/www/nagiosql/config
     cap_add:
       - NET_RAW

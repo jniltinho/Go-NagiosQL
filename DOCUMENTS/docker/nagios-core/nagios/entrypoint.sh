@@ -1,16 +1,18 @@
 #!/bin/bash
 set -e
 
-# PHP timezone — segue TZ do container (definido no docker-compose.yml)
-if [ -n "${TZ:-}" ]; then
-    printf '[Date]\ndate.timezone = %s\n' "$TZ" \
-        | tee /etc/php/8.4/fpm/conf.d/99-timezone.ini \
-              /etc/php/8.4/cli/conf.d/99-timezone.ini > /dev/null
-fi
+# PHP: timezone e include_path para NagiosQL (mod_php, Apache 8.4)
+{
+    [ -n "${TZ:-}" ] && printf '[Date]\ndate.timezone = %s\n' "$TZ"
+    # NagiosQL usa PEAR bundled; garante que PEAR.php seja encontrado
+    # mesmo se php-pear não estiver instalado no sistema
+    printf 'include_path = ".:/usr/share/php:/var/www/nagiosql/libraries/pear"\n'
+} > /etc/php/8.4/apache2/conf.d/99-timezone.ini
 
-NAGIOS_ETC=/usr/local/nagios/etc
-NAGIOS_VAR=/usr/local/nagios/var
-NAGIOS_LIB=/usr/local/nagios/libexec
+NAGIOS_ETC=/etc/nagios4        # config do daemon (pacote Debian)
+NAGIOSQL_ETC=/etc/nagiosql     # configs gerados pelo NagiosQL (PDF §1.2)
+NAGIOS_VAR=/var/lib/nagios4    # runtime: status, cmd pipe, spool
+NAGIOS_LIB=/usr/lib/nagios/plugins
 
 DB_HOST="${DB_HOST:-db}"
 DB_PORT="${DB_PORT:-3306}"
@@ -29,82 +31,133 @@ SETTINGS=/var/www/nagiosql/config/settings.php
 
 echo "==> [nagios] Inicializando volumes..."
 
+# /etc/nagios4: config principal do daemon (defaults do pacote Debian)
 if [ ! -f "$NAGIOS_ETC/nagios.cfg" ]; then
     echo "    Copiando configurações padrão para $NAGIOS_ETC..."
-    cp -r /usr/local/nagios/etc.default/. "$NAGIOS_ETC/"
-    chown -R nagios:nagios "$NAGIOS_ETC"
-    chmod -R 775 "$NAGIOS_ETC"
+    cp -r /etc/nagios4.default/. "$NAGIOS_ETC/"
+fi
+# Necessário para o Alias /nagios4/stylesheets no Apache (nagios4-cgi.conf)
+mkdir -p "$NAGIOS_ETC/stylesheets"
+
+# Permissões: root:nagios, dirs 755, arquivos 644 (padrão do pacote Debian).
+# 644: www-data (NagiosQL check) e nagios (daemon) podem ler todos os arquivos.
+# htpasswd.users tem ownership específico definido abaixo.
+chown -R root:nagios "$NAGIOS_ETC"
+find "$NAGIOS_ETC" -type d -exec chmod 755 {} \;
+find "$NAGIOS_ETC" -type f -exec chmod 644 {} \;
+
+# /etc/nagiosql: arquivos .cfg gerados pelo NagiosQL
+if [ -z "$(ls -A "$NAGIOSQL_ETC" 2>/dev/null)" ]; then
+    echo "    Copiando configs de exemplo para $NAGIOSQL_ETC..."
+    cp -rn /etc/nagiosql.default/. "$NAGIOSQL_ETC/"
 fi
 
-# Nagios 4.x default: lock_file=/run/nagios.lock (diretório root-owned, nagios não pode gravar).
-# Corrige para path no var/ que o nagios user controla.
-sed -i 's|^lock_file=.*|lock_file=/usr/local/nagios/var/nagios.lock|' "$NAGIOS_ETC/nagios.cfg"
-
+# /usr/lib/nagios/plugins: plugins do monitoramento
 if [ -z "$(ls -A "$NAGIOS_LIB" 2>/dev/null)" ]; then
     echo "    Copiando plugins para $NAGIOS_LIB..."
-    cp -a /usr/local/nagios/libexec.default/. "$NAGIOS_LIB/"
+    cp -a /usr/lib/nagios/plugins.default/. "$NAGIOS_LIB/"
 fi
 
-mkdir -p \
-    "$NAGIOS_VAR/rw" \
-    "$NAGIOS_VAR/spool/checkresults" \
-    "$NAGIOS_VAR/archives"
-chown -R nagios:nagios "$NAGIOS_VAR"
-# SGID em var/rw/: novos FIFOs (nagios.cmd) herdam grupo nagioscfg em vez do GID primário do processo
-chgrp nagioscfg "$NAGIOS_VAR/rw"
-chmod 775 "$NAGIOS_VAR/rw"
-chmod g+s  "$NAGIOS_VAR/rw"
-chmod 775 "$NAGIOS_VAR/spool/checkresults"
+# PID dir: não criado pelo systemd-tmpfiles em containers Docker
+mkdir -p /run/nagios4
+chown nagios:nagios /run/nagios4
 
+# Diretórios de runtime no volume var
+mkdir -p "$NAGIOS_VAR/rw" "$NAGIOS_VAR/spool/checkresults"
+chown -R nagios:nagios "$NAGIOS_VAR"
+# rw/: grupo www-data com SGID — Apache (www-data) escreve nagios.cmd e reload.trigger
+chown nagios:www-data "$NAGIOS_VAR/rw"
+chmod 2775 "$NAGIOS_VAR/rw"
+# reload.trigger: NagiosQL verifica file_exists() antes de escrever — manter sempre presente
+touch "$NAGIOS_VAR/rw/reload.trigger"
+chown nagios:www-data "$NAGIOS_VAR/rw/reload.trigger"
+chmod 660 "$NAGIOS_VAR/rw/reload.trigger"
+# checkresults: www-data precisa escrever (NagiosQL roda nagios4 -v como www-data)
+chown nagios:www-data "$NAGIOS_VAR/spool/checkresults"
+chmod 775  "$NAGIOS_VAR/spool/checkresults"
+
+mkdir -p /var/log/nagios4 /var/cache/nagios4
+chown nagios:nagios /var/log/nagios4 /var/cache/nagios4
+
+# htpasswd para Basic Auth do Nagios Core no Apache
 HTPASSWD="$NAGIOS_ETC/htpasswd.users"
 if [ ! -f "$HTPASSWD" ]; then
     echo "    Criando usuário nagiosadmin..."
     PASS="${NAGIOS_ADMIN_PASSWORD:-nagiosadmin}"
     printf "nagiosadmin:%s\n" "$(openssl passwd -apr1 "$PASS")" > "$HTPASSWD"
-    chown nagios:nagios "$HTPASSWD"
 fi
+# Sempre corrigir: o chown -R root:nagios acima sobrescreve esta permissão.
+# www-data precisa ler o htpasswd para autenticar requisições HTTP.
+chown nagios:www-data "$HTPASSWD"
+chmod 640 "$HTPASSWD"
 
+# nagios.cfg e cgi.cfg: www-data precisa de write (PDF §1.3)
+chown www-data:nagios "$NAGIOS_ETC/nagios.cfg" "$NAGIOS_ETC/cgi.cfg" 2>/dev/null || true
+chmod 640 "$NAGIOS_ETC/nagios.cfg" "$NAGIOS_ETC/cgi.cfg" 2>/dev/null || true
+
+# use_authentication=0: autenticação feita pelo Apache (Basic Auth).
+# O padrão Debian é 0, mas o volume pode ter sido editado — garantir.
+sed -i 's/^use_authentication=1/use_authentication=0/' "$NAGIOS_ETC/cgi.cfg" 2>/dev/null || true
+
+# ── /etc/nagiosql: estrutura de dirs e permissões ───────────────────
+# PDF §1.2: chown -R wwwrun.nagios /etc/nagiosql (www-data.nagios em Debian)
+# PDF §1.2: dirs 750, arquivos 640
 mkdir -p \
-    "$NAGIOS_ETC/nagiosql/hosts" \
-    "$NAGIOS_ETC/nagiosql/services" \
-    "$NAGIOS_ETC/nagiosql/backup/hosts" \
-    "$NAGIOS_ETC/nagiosql/backup/services" \
-    "$NAGIOS_ETC/import"
+    "$NAGIOSQL_ETC/hosts" \
+    "$NAGIOSQL_ETC/services" \
+    "$NAGIOSQL_ETC/backup/hosts" \
+    "$NAGIOSQL_ETC/backup/services"
 
-for cfg in timeperiods commands contacts contactgroups contacttemplates \
+for cfg in timeperiods contacts contactgroups contacttemplates \
            hosttemplates hostgroups hostextinfo hostescalations hostdependencies \
            servicetemplates servicegroups serviceextinfo serviceescalations servicedependencies; do
-    PLACEHOLDER="$NAGIOS_ETC/nagiosql/${cfg}.cfg"
-    [ -f "$PLACEHOLDER" ] || touch "$PLACEHOLDER"
+    [ -f "$NAGIOSQL_ETC/${cfg}.cfg" ] || touch "$NAGIOSQL_ETC/${cfg}.cfg"
 done
+# commands.cfg sempre vazio no início — NagiosQL gera o conteúdo via UI.
+# Um arquivo com definições duplicadas (já existentes no nagios4/objects/)
+# causa parse error que impede o daemon de iniciar.
+[ -f "$NAGIOSQL_ETC/commands.cfg" ] || touch "$NAGIOSQL_ETC/commands.cfg"
 
-# nagioscfg: grupo compartilhado nagios+www-data para escrita nos dirs de config
-chown -R nagios:nagioscfg "$NAGIOS_ETC/nagiosql" "$NAGIOS_ETC/import" 2>/dev/null || true
-chmod -R 775 "$NAGIOS_ETC/nagiosql" "$NAGIOS_ETC/import"
+chown -R www-data:nagios "$NAGIOSQL_ETC"
+find "$NAGIOSQL_ETC" -type d -exec chmod 750 {} \;
+find "$NAGIOSQL_ETC" -type f -exec chmod 640 {} \;
 
+# ── Remover entradas padrão que conflitam com NagiosQL ──────────────
+# NagiosQL gera versões completas de timeperiods, templates, contacts e
+# localhost — os arquivos padrão do pacote Debian causam duplicate errors.
 NAGIOS_CFG="$NAGIOS_ETC/nagios.cfg"
-if ! grep -q "nagiosql/hosts" "$NAGIOS_CFG" 2>/dev/null; then
+sed -i \
+    -e 's|^cfg_dir=/etc/nagios-plugins/config|#cfg_dir=/etc/nagios-plugins/config|' \
+    -e 's|^cfg_file=/etc/nagios4/objects/commands\.cfg|#cfg_file=/etc/nagios4/objects/commands.cfg|' \
+    -e 's|^cfg_file=/etc/nagios4/objects/timeperiods\.cfg|#cfg_file=/etc/nagios4/objects/timeperiods.cfg|' \
+    -e 's|^cfg_file=/etc/nagios4/objects/templates\.cfg|#cfg_file=/etc/nagios4/objects/templates.cfg|' \
+    -e 's|^cfg_file=/etc/nagios4/objects/contacts\.cfg|#cfg_file=/etc/nagios4/objects/contacts.cfg|' \
+    -e 's|^cfg_file=/etc/nagios4/objects/localhost\.cfg|#cfg_file=/etc/nagios4/objects/localhost.cfg|' \
+    "$NAGIOS_CFG"
+
+# ── Adicionar entradas cfg_dir/cfg_file ao nagios.cfg ─────────────
+if ! grep -q "etc/nagiosql/hosts" "$NAGIOS_CFG" 2>/dev/null; then
     echo "    Adicionando entradas NagiosQL ao nagios.cfg..."
     cat >> "$NAGIOS_CFG" << 'EOF'
 
-# Configurações gerenciadas pelo NagiosQL
-cfg_file=/usr/local/nagios/etc/nagiosql/timeperiods.cfg
-cfg_file=/usr/local/nagios/etc/nagiosql/commands.cfg
-cfg_file=/usr/local/nagios/etc/nagiosql/contacts.cfg
-cfg_file=/usr/local/nagios/etc/nagiosql/contactgroups.cfg
-cfg_file=/usr/local/nagios/etc/nagiosql/contacttemplates.cfg
-cfg_dir=/usr/local/nagios/etc/nagiosql/hosts
-cfg_file=/usr/local/nagios/etc/nagiosql/hosttemplates.cfg
-cfg_file=/usr/local/nagios/etc/nagiosql/hostgroups.cfg
-cfg_file=/usr/local/nagios/etc/nagiosql/hostextinfo.cfg
-cfg_file=/usr/local/nagios/etc/nagiosql/hostescalations.cfg
-cfg_file=/usr/local/nagios/etc/nagiosql/hostdependencies.cfg
-cfg_dir=/usr/local/nagios/etc/nagiosql/services
-cfg_file=/usr/local/nagios/etc/nagiosql/servicetemplates.cfg
-cfg_file=/usr/local/nagios/etc/nagiosql/servicegroups.cfg
-cfg_file=/usr/local/nagios/etc/nagiosql/serviceextinfo.cfg
-cfg_file=/usr/local/nagios/etc/nagiosql/serviceescalations.cfg
-cfg_file=/usr/local/nagios/etc/nagiosql/servicedependencies.cfg
+# Configurações gerenciadas pelo NagiosQL (/etc/nagiosql/)
+cfg_file=/etc/nagiosql/timeperiods.cfg
+cfg_file=/etc/nagiosql/commands.cfg
+cfg_file=/etc/nagiosql/contacts.cfg
+cfg_file=/etc/nagiosql/contactgroups.cfg
+cfg_file=/etc/nagiosql/contacttemplates.cfg
+cfg_dir=/etc/nagiosql/hosts
+cfg_file=/etc/nagiosql/hosttemplates.cfg
+cfg_file=/etc/nagiosql/hostgroups.cfg
+cfg_file=/etc/nagiosql/hostextinfo.cfg
+cfg_file=/etc/nagiosql/hostescalations.cfg
+cfg_file=/etc/nagiosql/hostdependencies.cfg
+cfg_dir=/etc/nagiosql/services
+cfg_file=/etc/nagiosql/servicetemplates.cfg
+cfg_file=/etc/nagiosql/servicegroups.cfg
+cfg_file=/etc/nagiosql/serviceextinfo.cfg
+cfg_file=/etc/nagiosql/serviceescalations.cfg
+cfg_file=/etc/nagiosql/servicedependencies.cfg
 EOF
 fi
 
@@ -129,34 +182,29 @@ if [ "$TABLE_COUNT" -eq 0 ]; then
         < /opt/nagiosql/nagiosQL_v35_db_mysql.sql
     echo "    Schema importado."
 
-    echo "    Importando dados de exemplo (templates, comandos, timeperiods)..."
-    # Contém: 24 comandos, 5 timeperiods, templates generic-host/linux-server/
-    # generic-service/local-service, contactgroup admins, 4 hostgroups,
-    # contact nagiosadmin e 4 hosts de exemplo com 21 serviços.
-    # Nota: o host 'localhost' do sample pode conflitar com objects/localhost.cfg
-    # se o usuário gerar os .cfg sem remover um dos dois primeiro.
+    echo "    Importando dados de exemplo..."
     $MYSQL --init-command="SET SESSION sql_mode='NO_ENGINE_SUBSTITUTION'" \
         < /opt/nagiosql/import_nagios_sample.sql
     echo "    Dados de exemplo importados."
 
-    echo "    Ajustando caminhos do Nagios Core..."
+    echo "    Ajustando caminhos para pacote Debian nagios4 + NagiosQL 3.5..."
     $MYSQL << SQL
 UPDATE \`tbl_configtarget\` SET
-    \`basedir\`       = '/usr/local/nagios/etc/nagiosql/',
-    \`hostconfig\`    = '/usr/local/nagios/etc/nagiosql/hosts/',
-    \`serviceconfig\` = '/usr/local/nagios/etc/nagiosql/services/',
-    \`backupdir\`     = '/usr/local/nagios/etc/nagiosql/backup/',
-    \`hostbackup\`    = '/usr/local/nagios/etc/nagiosql/backup/hosts/',
-    \`servicebackup\` = '/usr/local/nagios/etc/nagiosql/backup/services/',
-    \`nagiosbasedir\` = '/usr/local/nagios/etc/',
-    \`importdir\`     = '/usr/local/nagios/etc/import/',
-    \`picturedir\`    = '/usr/local/nagios/share/images/logos/',
-    \`commandfile\`   = '/usr/local/nagios/var/reload.trigger',
-    \`binaryfile\`    = '/usr/local/nagios/bin/nagios',
-    \`pidfile\`       = '/usr/local/nagios/var/nagios.lock',
-    \`conffile\`      = '/usr/local/nagios/etc/nagios.cfg',
-    \`cgifile\`       = '/usr/local/nagios/etc/cgi.cfg',
-    \`resourcefile\`  = '/usr/local/nagios/etc/resource.cfg',
+    \`basedir\`       = '/etc/nagiosql/',
+    \`hostconfig\`    = '/etc/nagiosql/hosts/',
+    \`serviceconfig\` = '/etc/nagiosql/services/',
+    \`backupdir\`     = '/etc/nagiosql/backup/',
+    \`hostbackup\`    = '/etc/nagiosql/backup/hosts/',
+    \`servicebackup\` = '/etc/nagiosql/backup/services/',
+    \`nagiosbasedir\` = '/etc/nagios4/',
+    \`importdir\`     = '/etc/nagios4/conf.d/',
+    \`picturedir\`    = '/usr/share/nagios4/htdocs/images/logos/',
+    \`commandfile\`   = '/var/lib/nagios4/rw/reload.trigger',
+    \`binaryfile\`    = '/usr/sbin/nagios4',
+    \`pidfile\`       = '/run/nagios4/nagios4.pid',
+    \`conffile\`      = '/etc/nagios4/nagios.cfg',
+    \`cgifile\`       = '/etc/nagios4/cgi.cfg',
+    \`resourcefile\`  = '/etc/nagios4/resource.cfg',
     \`version\`       = 4
 WHERE \`target\` = 'localhost';
 SQL
@@ -178,6 +226,14 @@ SQL
 INSERT INTO \`tbl_settings\` (\`category\`, \`name\`, \`value\`)
 VALUES ('db', 'version', '3.5.0')
 ON DUPLICATE KEY UPDATE \`value\` = '3.5.0';
+SQL
+
+    # check_dns não vem no import padrão mas é usado pelos hosts de amostra
+    $MYSQL << 'SQL'
+INSERT IGNORE INTO `tbl_command`
+    (`command_name`, `command_line`, `command_type`, `register`, `active`, `last_modified`, `access_group`, `config_id`)
+VALUES
+    ('check_dns', '$USER1$/check_dns -H www.google.com -s $HOSTADDRESS$ $ARG1$', 0, '1', '1', NOW(), 0, 0);
 SQL
     echo "    Configuração inicial concluída."
 fi
@@ -243,12 +299,11 @@ fi
 
 echo "==> [nagios] Validando nagios.cfg..."
 if su -s /bin/bash nagios -c \
-    "/usr/local/nagios/bin/nagios -v $NAGIOS_CFG" 2>&1 | grep -q "^Total Errors:   0"; then
+    "/usr/sbin/nagios4 -v $NAGIOS_CFG" 2>&1 | grep -q "^Total Errors:   0"; then
     echo "    Configuração OK."
 else
     echo "    Aviso: erros encontrados — verifique os logs."
 fi
 
 echo "==> Iniciando supervisord..."
-mkdir -p /run/php
 exec /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
