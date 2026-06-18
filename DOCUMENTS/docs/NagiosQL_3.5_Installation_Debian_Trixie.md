@@ -1,19 +1,19 @@
-# NagiosQL 3.5 — Guia de Instalação
-### Debian Trixie (13) · Nagios4 via pacote apt · Apache2 + PHP 8.4
+# NagiosQL 3.5 — Installation Guide
+### Debian Trixie (13) · Nagios 4 via apt · Apache2 + PHP 8.4
 
 ---
 
-## 1. Pré-requisitos
+## 1. Prerequisites
 
-| Componente | Versão mínima | Pacote Debian |
+| Component | Min version | Debian package |
 |---|---|---|
 | Apache2 | 2.4 | `apache2` |
 | PHP | 8.2+ | `libapache2-mod-php8.4` |
-| MySQL/MariaDB | 5.7+ | `mariadb-server` ou externo |
+| MySQL/MariaDB | 5.7+ | `mariadb-server` or external |
 | Nagios | 4.x | `nagios4-core` |
-| PHP módulos | — | `php8.4-mysql php8.4-gd php8.4-mbstring php8.4-curl php8.4-xml php8.4-zip` |
+| PHP modules | — | `php8.4-mysql php8.4-gd php8.4-mbstring php8.4-curl php8.4-xml php8.4-zip` |
 
-Instalar pacotes:
+Install all packages:
 
 ```bash
 apt-get update
@@ -26,28 +26,28 @@ apt-get install -y \
 
 ---
 
-## 2. Caminhos padrão do pacote Debian nagios4
+## 2. Debian nagios4 package — default paths
 
-| Recurso | Caminho |
+| Resource | Path |
 |---|---|
-| Config principal | `/etc/nagios4/nagios.cfg` |
-| Config CGI | `/etc/nagios4/cgi.cfg` |
+| Main config | `/etc/nagios4/nagios.cfg` |
+| CGI config | `/etc/nagios4/cgi.cfg` |
 | Resource file | `/etc/nagios4/resource.cfg` |
 | Plugins | `/usr/lib/nagios/plugins/` |
 | CGI binaries | `/usr/lib/cgi-bin/nagios4/` |
-| Arquivos estáticos | `/usr/share/nagios4/htdocs/` |
-| Binário daemon | `/usr/sbin/nagios4` |
-| Var/runtime | `/var/lib/nagios4/` |
-| Command pipe | `/var/lib/nagios4/rw/nagios.cmd` |
+| Static files | `/usr/share/nagios4/htdocs/` |
+| Daemon binary | `/usr/sbin/nagios4` |
+| Var / runtime | `/var/lib/nagios4/` |
+| External command pipe | `/var/lib/nagios4/rw/nagios.cmd` |
 | PID file | `/run/nagios4/nagios4.pid` |
 | Logs | `/var/log/nagios4/nagios.log` |
 | Object cache | `/var/cache/nagios4/objects.cache` |
 
 ---
 
-## 3. Estrutura de diretórios do NagiosQL
+## 3. NagiosQL directory structure
 
-O NagiosQL armazena os arquivos de configuração do Nagios em **`/etc/nagiosql/`** — diretório separado do `/etc/nagios4/`.
+NagiosQL writes Nagios object files to **`/etc/nagiosql/`** — a directory separate from `/etc/nagios4/`.
 
 ```bash
 mkdir -p \
@@ -57,18 +57,17 @@ mkdir -p \
     /etc/nagiosql/backup/services
 ```
 
-### 3.1 Permissões
+### 3.1 Permissions
 
-O usuário do Apache (`www-data`) precisa de escrita; o daemon Nagios (`nagios`) precisa de leitura:
+Apache (`www-data`) needs write access; the Nagios daemon (`nagios`) needs read access:
 
 ```bash
-# www-data (owner) escreve, nagios (group) lê
 chown -R www-data:nagios /etc/nagiosql
 find /etc/nagiosql -type d -exec chmod 750 {} \;
 find /etc/nagiosql -type f -exec chmod 640 {} \;
 ```
 
-Arquivos de config do Nagios que o NagiosQL modifica:
+NagiosQL also needs write access to two core Nagios files:
 
 ```bash
 chown www-data:nagios /etc/nagios4/nagios.cfg /etc/nagios4/cgi.cfg
@@ -77,23 +76,23 @@ chmod 640 /etc/nagios4/nagios.cfg /etc/nagios4/cgi.cfg
 
 ---
 
-## 4. Configuração do Apache2
+## 4. Apache2 configuration
 
-### 4.1 Habilitar módulos
+### 4.1 Enable modules
 
-O `libapache2-mod-php8.4` requer `mpm_prefork` (mod_php não é thread-safe).
-O pacote `nagios4-cgi` instala `/etc/apache2/conf-available/nagios4-cgi.conf` com
-`Require ip` (só IPs privados) e Digest Auth — desabilitar e usar VirtualHost próprio:
+`libapache2-mod-php8.4` requires `mpm_prefork` (mod_php is not thread-safe).
+The `nagios4-cgi` package installs `/etc/apache2/conf-available/nagios4-cgi.conf` with
+`Require ip` (private IPs only) and Digest Auth — disable it and use a custom VirtualHost:
 
 ```bash
 a2dismod mpm_event
 a2enmod mpm_prefork php8.4 cgi
-a2disconf nagios4-cgi   # desabilita o conf padrão do pacote
+a2disconf nagios4-cgi
 ```
 
-### 4.2 VirtualHost — Nagios Core (porta 80)
+### 4.2 VirtualHost — Nagios Core (port 80)
 
-Criar `/etc/apache2/sites-available/nagios4.conf`:
+Create `/etc/apache2/sites-available/nagios4.conf`:
 
 ```apache
 <VirtualHost *:80>
@@ -122,9 +121,9 @@ Criar `/etc/apache2/sites-available/nagios4.conf`:
 </VirtualHost>
 ```
 
-### 4.3 VirtualHost — NagiosQL (porta 8081)
+### 4.3 VirtualHost — NagiosQL (port 8081)
 
-Criar `/etc/apache2/sites-available/nagiosql.conf`:
+Create `/etc/apache2/sites-available/nagiosql.conf`:
 
 ```apache
 Listen 8081
@@ -145,7 +144,7 @@ Listen 8081
 </VirtualHost>
 ```
 
-Ativar sites:
+Enable sites:
 
 ```bash
 a2dissite 000-default
@@ -153,9 +152,9 @@ a2ensite nagios4 nagiosql
 systemctl restart apache2
 ```
 
-### 4.4 PHP — configurações obrigatórias
+### 4.4 PHP — required settings
 
-Criar `/etc/php/8.4/apache2/conf.d/99-nagiosql.ini`:
+Create `/etc/php/8.4/apache2/conf.d/99-nagiosql.ini`:
 
 ```ini
 [Date]
@@ -170,9 +169,9 @@ file_uploads = On
 
 ---
 
-## 5. Instalar o NagiosQL
+## 5. Install NagiosQL
 
-Copiar os arquivos para `/var/www/nagiosql/`:
+Copy files to `/var/www/nagiosql/`:
 
 ```bash
 cd /opt
@@ -183,20 +182,20 @@ chmod -R 755 /var/www/nagiosql
 chmod 750 /var/www/nagiosql/config
 ```
 
-Acessar o wizard de instalação:
+Run the installation wizard:
 
 ```
-http://servidor/nagiosql/install/index.php    (porta 80)
-http://servidor:8081/install/index.php        (porta 8081)
+http://server/nagiosql/install/index.php    (port 80)
+http://server:8081/install/index.php        (port 8081)
 ```
 
 ---
 
-## 6. Configuração do NagiosQL (Administration → Config targets)
+## 6. NagiosQL configuration (Administration → Config targets)
 
-Após a instalação, em **Administration → Config targets → localhost**, definir:
+After installation, go to **Administration → Config targets → localhost** and set:
 
-| Campo | Valor |
+| Field | Value |
 |---|---|
 | **Base directory** | `/etc/nagiosql/` |
 | **Host directory** | `/etc/nagiosql/hosts/` |
@@ -207,7 +206,7 @@ Após a instalação, em **Administration → Config targets → localhost**, de
 | **Nagios base dir** | `/etc/nagios4/` |
 | **Import directory** | `/etc/nagios4/conf.d/` |
 | **Picture directory** | `/usr/share/nagios4/htdocs/images/logos/` |
-| **Nagios command file** | `/var/lib/nagios4/rw/nagios.cmd` |
+| **Nagios command file** | `/var/lib/nagios4/rw/reload.trigger` |
 | **Nagios binary** | `/usr/sbin/nagios4` |
 | **Nagios process file** | `/run/nagios4/nagios4.pid` |
 | **Nagios config file** | `/etc/nagios4/nagios.cfg` |
@@ -215,14 +214,49 @@ Após a instalação, em **Administration → Config targets → localhost**, de
 | **Resource file** | `/etc/nagios4/resource.cfg` |
 | **Nagios version** | `4` |
 
+> **Note — command file:** NagiosQL uses a file-based reload trigger (`reload.trigger`) rather
+> than the traditional external command pipe (`nagios.cmd`). The reload watcher script polls
+> for this file and runs `nagios4 -v && systemctl reload nagios4` when it appears.
+
 ---
 
-## 7. Configuração do nagios.cfg
+## 7. nagios.cfg — critical changes for NagiosQL
 
-Adicionar ao final de `/etc/nagios4/nagios.cfg` para que o Nagios leia os arquivos gerados pelo NagiosQL:
+The Debian `nagios4` package ships default object files under `/etc/nagios4/objects/` that
+**duplicate** the definitions NagiosQL generates. Loading both causes `duplicate definition`
+errors that prevent the daemon from starting.
 
+### 7.1 Comment out conflicting default entries
+
+```bash
+sed -i \
+    -e 's|^cfg_dir=/etc/nagios-plugins/config|#cfg_dir=/etc/nagios-plugins/config|' \
+    -e 's|^cfg_file=/etc/nagios4/objects/commands\.cfg|#cfg_file=/etc/nagios4/objects/commands.cfg|' \
+    -e 's|^cfg_file=/etc/nagios4/objects/timeperiods\.cfg|#cfg_file=/etc/nagios4/objects/timeperiods.cfg|' \
+    -e 's|^cfg_file=/etc/nagios4/objects/templates\.cfg|#cfg_file=/etc/nagios4/objects/templates.cfg|' \
+    -e 's|^cfg_file=/etc/nagios4/objects/contacts\.cfg|#cfg_file=/etc/nagios4/objects/contacts.cfg|' \
+    -e 's|^cfg_file=/etc/nagios4/objects/localhost\.cfg|#cfg_file=/etc/nagios4/objects/localhost.cfg|' \
+    /etc/nagios4/nagios.cfg
 ```
-# Configurações gerenciadas pelo NagiosQL
+
+Files that conflict and why:
+
+| Default file | Conflict |
+|---|---|
+| `objects/commands.cfg` | NagiosQL generates `commands.cfg` in `/etc/nagiosql/` |
+| `objects/timeperiods.cfg` | NagiosQL generates `timeperiods.cfg` in `/etc/nagiosql/` |
+| `objects/templates.cfg` | NagiosQL generates host/service templates |
+| `objects/contacts.cfg` | NagiosQL generates `contacts.cfg` + `contactgroups.cfg` |
+| `objects/localhost.cfg` | NagiosQL manages all host definitions |
+
+### 7.2 Add NagiosQL cfg entries
+
+Append to `/etc/nagios4/nagios.cfg` (idempotent — only if not already present):
+
+```bash
+grep -q "etc/nagiosql/hosts" /etc/nagios4/nagios.cfg || cat >> /etc/nagios4/nagios.cfg << 'EOF'
+
+# Configurations managed by NagiosQL (/etc/nagiosql/)
 cfg_file=/etc/nagiosql/timeperiods.cfg
 cfg_file=/etc/nagiosql/commands.cfg
 cfg_file=/etc/nagiosql/contacts.cfg
@@ -240,22 +274,46 @@ cfg_file=/etc/nagiosql/servicegroups.cfg
 cfg_file=/etc/nagiosql/serviceextinfo.cfg
 cfg_file=/etc/nagiosql/serviceescalations.cfg
 cfg_file=/etc/nagiosql/servicedependencies.cfg
+EOF
 ```
 
----
-
-## 8. Command pipe e reload do Nagios
-
-O Debian nagios4 cria `/var/lib/nagios4/rw/` com grupo `www-data` — o Apache pode escrever nesse diretório por padrão.
-
-Verificar que `check_external_commands=1` está em `nagios.cfg`:
+Also ensure `check_external_commands=1` is set:
 
 ```bash
 grep check_external_commands /etc/nagios4/nagios.cfg
 # check_external_commands=1
 ```
 
-Validar e recarregar:
+---
+
+## 8. Runtime directories and reload trigger
+
+### 8.1 rw/ directory permissions
+
+The `rw/` directory must be writable by both the Nagios daemon (`nagios`) and Apache
+(`www-data`). Use SGID so new files inherit the group:
+
+```bash
+mkdir -p /var/lib/nagios4/rw /var/lib/nagios4/spool/checkresults
+chown nagios:www-data /var/lib/nagios4/rw
+chmod 2775 /var/lib/nagios4/rw        # SGID: new files inherit www-data group
+
+chown nagios:www-data /var/lib/nagios4/spool/checkresults
+chmod 775 /var/lib/nagios4/spool/checkresults
+```
+
+### 8.2 reload.trigger
+
+NagiosQL checks `file_exists()` on the command file before writing. Pre-create the trigger
+file so NagiosQL can write to it even before the first reload:
+
+```bash
+touch /var/lib/nagios4/rw/reload.trigger
+chown nagios:www-data /var/lib/nagios4/rw/reload.trigger
+chmod 660 /var/lib/nagios4/rw/reload.trigger
+```
+
+### 8.3 Validate and reload
 
 ```bash
 /usr/sbin/nagios4 -v /etc/nagios4/nagios.cfg
@@ -264,18 +322,18 @@ systemctl reload nagios4
 
 ---
 
-## 9. cgi.cfg — autenticação via Apache
+## 9. cgi.cfg — authentication mode
 
-O pacote Debian define `use_authentication=0` em `/etc/nagios4/cgi.cfg` por padrão.
-Com Basic Auth no Apache, esse é o modo correto: qualquer usuário autenticado pelo Apache
-tem acesso completo ao Nagios. Verificar:
+The Debian package sets `use_authentication=0` in `/etc/nagios4/cgi.cfg` by default.
+With Apache Basic Auth in front, this is correct: Apache handles authentication and every
+authenticated user gets full access to the Nagios CGI. Verify:
 
 ```bash
 grep use_authentication /etc/nagios4/cgi.cfg
 # use_authentication=0
 ```
 
-Criar também o diretório de stylesheets referenciado no VirtualHost:
+Also create the stylesheets directory referenced in the VirtualHost:
 
 ```bash
 mkdir -p /etc/nagios4/stylesheets
@@ -283,33 +341,40 @@ mkdir -p /etc/nagios4/stylesheets
 
 ---
 
-## 10. htpasswd — usuário do Nagios Core
+## 10. htpasswd — Nagios Core user
 
 ```bash
-# Criar o arquivo com o usuário nagiosadmin
+# Create the file with the nagiosadmin user
 htpasswd -c /etc/nagios4/htpasswd.users nagiosadmin
 
-# Permissões
+# Fix permissions (Apache needs read access)
 chown nagios:www-data /etc/nagios4/htpasswd.users
 chmod 640 /etc/nagios4/htpasswd.users
 ```
 
 ---
 
-## 11. Verificação final
+## 11. Final verification
 
 ```
-http://servidor:80/cgi-bin/nagios4/tac.cgi   → Nagios Core (Basic Auth)
-http://servidor:8081/                          → NagiosQL (login próprio)
+http://server:80/cgi-bin/nagios4/tac.cgi   → Nagios Core (Basic Auth)
+http://server:8081/                          → NagiosQL (own login)
 ```
 
-Verificar no NagiosQL: **Tools → Support page** mostra o status de todos os caminhos configurados.
+In NagiosQL: **Tools → Support page** shows the status of all configured paths.
+
+Validate the Nagios config and confirm zero errors:
+
+```bash
+/usr/sbin/nagios4 -v /etc/nagios4/nagios.cfg 2>&1 | grep "Total Errors"
+# Total Errors:   0
+```
 
 ---
 
-## Apêndice — Resumo de diferenças para guias antigos (nagios3 / pré-2020)
+## Appendix — Differences from older guides (nagios3 / pre-2020)
 
-| Guia antigo | Debian nagios4 / trixie |
+| Old guide | Debian nagios4 / trixie |
 |---|---|
 | `/etc/nagios/` | `/etc/nagios4/` |
 | `/opt/nagios/bin/nagios` | `/usr/sbin/nagios4` |
@@ -320,3 +385,5 @@ Verificar no NagiosQL: **Tools → Support page** mostra o status de todos os ca
 | PHP 5.x / 7.x | PHP 8.4 |
 | `php5-mysql` | `php8.4-mysql` |
 | Apache `wwwrun` | Apache `www-data` |
+| `nagios.cmd` as command file | `reload.trigger` (file-based reload) |
+| Default object files loaded | Default object files **must be commented out** |
